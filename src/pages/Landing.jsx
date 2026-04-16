@@ -1,305 +1,161 @@
 import React from 'react'
-import { motion, useScroll, useTransform } from 'framer-motion'
-import { ArrowRight, Zap, PenTool, BarChart, Share2, Terminal, Cpu, Database, TrendingUp, Layers, CheckCircle2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowRight, Sparkles, Target, Zap, CheckCircle2, Rocket, BarChart3, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-
-// Transperent Textures for brutalist edgy look
-const textures = {
-  noise: "url('https://www.transparenttextures.com/patterns/stardust.png')",
-  grid: "url('https://www.transparenttextures.com/patterns/cubes.png')",
-  lines: "url('https://www.transparenttextures.com/patterns/noise-lines.png')",
-  diamond: "url('https://www.transparenttextures.com/patterns/diagmonds-light.png')"
-}
-
-// Intense, sharp easing curves
-const rawEase = [0.85, 0, 0.15, 1]; // Massive fast acceleration and sharp stop
-const snapEase = [0.22, 1, 0.36, 1];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1, delayChildren: 0.05 }
-  }
-}
-
-// Brutal entrance/exit animations
-const snapUpVariants = {
-  hidden: { opacity: 0, y: 100, skewY: 4 },
-  visible: { opacity: 1, y: 0, skewY: 0, transition: { duration: 0.4, ease: rawEase } }
-}
-
-const slamVariants = {
-  hidden: { opacity: 0, scale: 0.85 },
-  visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: snapEase } }
-}
-
-const strikeVariants = {
-  hidden: { opacity: 0, x: -150, skewX: -10 },
-  visible: { opacity: 1, x: 0, skewX: 0, transition: { duration: 0.4, ease: rawEase } }
-}
-
-// A global viewport config mapping to allow repeatable in/out triggers
-const viewConf = { once: false, amount: 0.15, margin: "-50px" }
-
-const Section = ({ inverted, texture, children, style = {}, noBorder = false }) => {
-  const bg = inverted ? 'var(--text-primary)' : 'var(--bg-primary)'
-  const color = inverted ? 'var(--bg-primary)' : 'var(--text-primary)'
-  const borderRule = noBorder ? 'none' : `2px solid ${inverted ? 'var(--bg-primary)' : 'var(--border-color)'}`
-  
-  return (
-    <section style={{ 
-      backgroundColor: bg, 
-      color: color, 
-      backgroundImage: texture,
-      borderBottom: borderRule,
-      padding: '6rem 2rem',
-      position: 'relative',
-      overflow: 'hidden',
-      ...style 
-    }}>
-      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-        {children}
-      </div>
-    </section>
-  )
-}
 
 const Landing = () => {
   const navigate = useNavigate()
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', overflowX: 'hidden' }}>
+    <div style={{ 
+        minHeight: '100vh', 
+        backgroundColor: '#0F172A', 
+        color: '#E2E8F0', 
+        overflowX: 'hidden',
+        position: 'relative'
+    }}>
       
+      {/* Colorful Background Orbs */}
+      <div style={{ position: 'absolute', top: '-10%', left: '-10%', width: '500px', height: '500px', background: 'rgba(56, 189, 248, 0.15)', filter: 'blur(120px)', borderRadius: '50%', zIndex: 0 }}></div>
+      <div style={{ position: 'absolute', top: '20%', right: '-5%', width: '400px', height: '400px', background: 'rgba(167, 139, 250, 0.15)', filter: 'blur(100px)', borderRadius: '50%', zIndex: 0 }}></div>
+      <div style={{ position: 'absolute', bottom: '10%', left: '20%', width: '600px', height: '600px', background: 'rgba(16, 185, 129, 0.05)', filter: 'blur(150px)', borderRadius: '50%', zIndex: 0 }}></div>
+
       {/* Navbar */}
-      <nav style={{ padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', backgroundImage: textures.noise }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>AIMarket <span className="text-gradient">Pro</span></h1>
-        <button onClick={() => navigate('/dashboard')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase' }}>
-          Execute <ArrowRight size={18} />
-        </button>
+      <nav style={{ padding: '1.5rem 2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'sticky', top: 0, zIndex: 50 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ background: 'linear-gradient(135deg, #38BDF8, #A78BFA)', padding: '0.4rem', borderRadius: '0.5rem' }}>
+                <Rocket size={20} color="#0F172A" />
+            </div>
+            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#F8FAFC' }}>
+                AIMarket <span style={{ background: 'linear-gradient(90deg, #38BDF8, #A78BFA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Pro</span>
+            </h1>
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', color: '#94A3B8' }} onClick={() => navigate('/dashboard')}>Log In</span>
+            <button onClick={() => navigate('/create-ad')} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontSize: '0.875rem', color: '#0F172A', background: 'linear-gradient(135deg, #38BDF8, #A78BFA)' }}>
+            Get Started
+            </button>
+        </div>
       </nav>
 
-      {/* 1. Hero Section (White) */}
-      <Section texture={textures.noise} style={{ padding: '10rem 2rem', textAlign: 'center' }}>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <motion.div variants={strikeVariants} style={{ background: 'var(--text-primary)', color: 'var(--bg-primary)', padding: '0.5rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontFamily: 'var(--font-mono)', marginBottom: '2rem', border: '2px solid var(--text-primary)' }}>
-            <Zap size={16} fill="currentColor" /> SYSTEM ONLINE // V2.0
-          </motion.div>
-          
-          <motion.h1 variants={snapUpVariants} style={{ fontSize: 'clamp(3rem, 10vw, 7.5rem)', lineHeight: 0.85, marginBottom: '1.5rem', maxWidth: '1200px', textTransform: 'uppercase' }}>
-            DOMINATE MARKETING WITH <span className="text-gradient">BRUTE FORCE AI</span>
-          </motion.h1>
-          
-          <motion.p variants={snapUpVariants} style={{ fontSize: '1.25rem', maxWidth: '600px', marginBottom: '3rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', fontWeight: 600 }}>
-            No soft edges. No fluff. Generate copy, synthesize visuals, and deploy to socials with mechanical precision.
-          </motion.p>
-          
-          <motion.button 
-            variants={slamVariants}
-            whileHover={{ scale: 1.02, boxShadow: '12px 12px 0px 0px var(--accent-danger)', transition: { duration: 0.1 } }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/dashboard')}
-            style={{ fontSize: '1.25rem', padding: '1.25rem 2.5rem', background: 'var(--text-primary)', color: 'var(--bg-primary)', border: '2px solid var(--text-primary)', boxShadow: '8px 8px 0px 0px var(--accent-success)', fontFamily: 'var(--font-heading)', textTransform: 'uppercase', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '1rem', transition: 'box-shadow 0.15s ease-out' }}
-          >
-            INITIALIZE DASHBOARD <ArrowRight size={24} />
-          </motion.button>
-        </motion.div>
-      </Section>
+      <main style={{ position: 'relative', zIndex: 10 }}>
+          {/* Hero Section */}
+          <section style={{ padding: '10rem 2rem 8rem', textAlign: 'center', maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: "easeOut" }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1.25rem', background: 'rgba(30, 41, 59, 0.6)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 'var(--radius-full)', fontSize: '0.875rem', fontWeight: 600, marginBottom: '2.5rem', color: '#38BDF8', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                <Sparkles size={16} /> The First Done-For-You AI Ad Service
+              </div>
+              
+              <h1 style={{ fontSize: 'clamp(3rem, 7vw, 5.5rem)', lineHeight: 1.05, marginBottom: '2rem', letterSpacing: '-0.04em', fontWeight: 900, color: '#F8FAFC' }}>
+                Upload your product. <br/>
+                <span style={{ background: 'linear-gradient(135deg, #38BDF8, #A78BFA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>We handle everything else.</span>
+              </h1>
+              
+              <p style={{ fontSize: '1.25rem', color: '#94A3B8', maxWidth: '650px', margin: '0 auto 3rem', lineHeight: 1.6, fontWeight: 500 }}>
+                Stop wrestling with complex ad managers. Our AI generates the creatives, targets the perfect audience, and optimizes your budget automatically across Meta, Google, and TikTok.
+              </p>
+              
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                <button className="btn-primary" onClick={() => navigate('/create-ad')} style={{ padding: '1rem 2.5rem', fontSize: '1.125rem', background: 'linear-gradient(90deg, #38BDF8, #A78BFA)', color: '#0F172A', boxShadow: '0 10px 25px rgba(56, 189, 248, 0.2)', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                  Launch a Campaign <ArrowRight size={20} style={{ marginLeft: '0.5rem' }} />
+                </button>
+              </div>
+            </motion.div>
+          </section>
 
-      {/* Marquee transition */}
-      <div style={{ background: 'var(--accent-warning)', color: 'var(--text-primary)', padding: '1rem', overflow: 'hidden', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border-color)' }}>
-        <motion.div animate={{ x: [0, -1000] }} transition={{ repeat: Infinity, duration: 15, ease: "linear" }} style={{ display: 'flex', gap: '2rem', fontSize: '1.5rem', fontFamily: 'var(--font-mono)', fontWeight: 800, textTransform: 'uppercase' }}>
-          {[...Array(10)].map((_, i) => <span key={i}>// NO EXCUSES // EXECUTE // DESTROY METRICS //</span>)}
-        </motion.div>
-      </div>
-
-      {/* 2. Core Features Grid (Black) */}
-      <Section inverted texture={textures.grid} style={{ padding: '0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))' }}>
-          <FeatureBox 
-            inverted
-            icon={<PenTool size={48} />}
-            title="SICK AUTOMATION"
-            desc="Inject raw prompts. Extract high-converting copy and stunning 4K visuals via Groq & HuggingFace."
-            color="var(--accent-warning)"
-          />
-          <FeatureBox 
-            inverted
-            icon={<BarChart size={48} />}
-            title="ALGORITHMIC SPEND"
-            desc="Algorithmic allocation of your capital across networks. Stop bleeding money, start multiplying."
-            color="var(--accent-success)"
-          />
-          <FeatureBox 
-            inverted
-            icon={<Share2 size={48} />}
-            title="INSTANT DEPLOY"
-            desc="Push generated assets directly to Instagram. Zero friction between creation and execution."
-            color="var(--accent-primary)"
-          />
-        </div>
-      </Section>
-
-      {/* 3. The Pipeline / How It Works (White) */}
-      <Section texture={textures.lines}>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants}>
-          <motion.h2 variants={strikeVariants} style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', marginBottom: '4rem', maxWidth: '800px' }}>
-            THE PIPELINE IS <span style={{ background: 'var(--text-primary)', color: 'var(--bg-primary)', padding: '0 0.5rem' }}>UNBREAKABLE</span>.
-          </motion.h2>
-          
-          <div style={{ display: 'grid', gap: '2rem' }}>
-            <PipelineStep num="01" title="INGEST TARGET" desc="Feed the system your raw brand data and audience parameters." icon={<Cpu size={32} />} />
-            <PipelineStep num="02" title="SYNTHESIZE ASSETS" desc="AI models forge the copy and render the visuals." icon={<Layers size={32} />} />
-            <PipelineStep num="03" title="EXECUTE LAUNCH" desc="Auto-deploy straight to your Instagram pipeline." icon={<Terminal size={32} />} />
-          </div>
-        </motion.div>
-      </Section>
-
-      {/* 4. Social Proof / Big Metrics (Black) */}
-      <Section inverted texture={textures.diamond} style={{ textAlign: 'center' }}>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants}>
-          <motion.h2 variants={snapUpVariants} style={{ fontSize: 'clamp(2rem, 5vw, 4rem)', marginBottom: '4rem' }}>
-            METRICS THAT BLEED GREEN.
-          </motion.h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem' }}>
-            <MetricBox value="324%" label="Avg ROI Amplification" color="var(--accent-success)" inverted />
-            <MetricBox value="10x" label="Faster Production" color="var(--accent-warning)" inverted />
-            <MetricBox value="ZERO" label="Wasted Ad Spend" color="var(--accent-danger)" inverted />
-          </div>
-        </motion.div>
-      </Section>
-
-      {/* 5. Tech Stack & APIs (White) */}
-      <Section texture={textures.noise}>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants} style={{ display: 'flex', flexDirection: 'column', md: { flexDirection: 'row' }, gap: '4rem', alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <motion.h2 variants={strikeVariants} style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', marginBottom: '2rem' }}>
-              POWERED BY <br/>RAW <span className="text-gradient">COMPUTE</span>.
-            </motion.h2>
-            <motion.p variants={strikeVariants} style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', marginBottom: '2rem', maxWidth: '500px', fontWeight: 600 }}>
-              We hook directly into bare-metal APIs to give you the most aggressive performance allowed by rate limits.
-            </motion.p>
-          </div>
-          <div style={{ flex: 1, display: 'grid', gap: '1rem', width: '100%' }}>
-            <TechBox name="GROQ API" type="NPU TEXT GEN" />
-            <TechBox name="HUGGINGFACE" type="IMAGE DIFFUSION" />
-            <TechBox name="META GRAPH" type="IG DEPLOYMENT" />
-          </div>
-        </motion.div>
-      </Section>
-
-      {/* 6. FAQ / Doctrine (Black) */}
-      <Section inverted texture={textures.lines}>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants}>
-          <motion.h2 variants={snapUpVariants} style={{ fontSize: 'clamp(2rem, 5vw, 4rem)', marginBottom: '4rem' }}>
-            THE DOCTRINE (FAQ)
-          </motion.h2>
-          <div style={{ display: 'grid', gap: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-            <FaqBox q="HOW FAST IS THE TEXT GEN?" a="Groq pushes LPU inference speeds. It's essentially instantaneous. Blink and you miss it." inverted />
-            <FaqBox q="CAN I BRING MY OWN KEYS?" a="Yes. The system is designed to eat your API keys and pump out assets without a middleman." inverted />
-            <FaqBox q="IS IT RESPONSIVE?" a="It's built on a brutalist flexbox architecture. It breaks exactly when we want it to break." inverted />
-          </div>
-        </motion.div>
-      </Section>
-
-      {/* 7. Final CTA (White) */}
-      <Section texture={textures.grid} style={{ textAlign: 'center', padding: '10rem 2rem' }}>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants}>
-          <motion.h2 variants={slamVariants} style={{ fontSize: 'clamp(3rem, 8vw, 6.5rem)', marginBottom: '2rem', lineHeight: 0.9 }}>
-            STOP READING.<br/>START <span style={{ background: 'var(--text-primary)', color: 'var(--bg-primary)', padding: '0 0.5rem' }}>EXECUTING.</span>
-          </motion.h2>
-          <motion.button 
-            variants={snapUpVariants}
-            whileHover={{ scale: 1.05, boxShadow: '8px 8px 0px 0px var(--text-primary)' }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/dashboard')}
-            className="btn-primary" 
-            style={{ fontSize: '1.8rem', padding: '1.5rem 4rem', display: 'inline-flex', alignItems: 'center', gap: '1rem', border: '4px solid var(--text-primary)', boxShadow: '4px 4px 0px 0px var(--text-primary)', transition: 'transform 0.1s, box-shadow 0.1s' }}
-          >
-            ENTER SYSTEM <Zap fill="currentColor" size={32} />
-          </motion.button>
-        </motion.div>
-      </Section>
-
-      {/* 8. Footer (Black) */}
-      <Section inverted style={{ padding: '4rem 2rem', borderTop: '4px solid var(--bg-primary)' }} noBorder>
-        <motion.div initial="hidden" whileInView="visible" viewport={viewConf} variants={containerVariants}>
-          <motion.div variants={snapUpVariants} style={{ display: 'flex', flexDirection: 'column', md: { flexDirection: 'row' }, justifyContent: 'space-between', alignItems: 'center', gap: '2rem' }}>
-            <h1 style={{ margin: 0, fontSize: '2.5rem', border: '4px solid var(--bg-primary)', padding: '0.5rem 1.5rem' }}>
-              AIMarket Pro
-            </h1>
-            <div style={{ display: 'flex', gap: '2rem', fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 600 }}>
-              <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>SYSTEM GITHUB</span>
-              <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>DOCUMENTATION</span>
-              <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>TRANSMISSION</span>
+          {/* How it Works / Colorful Cards */}
+          <section style={{ padding: '6rem 2rem', position: 'relative' }}>
+            <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+              <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
+                <h2 style={{ fontSize: '3rem', marginBottom: '1rem', fontWeight: 800, color: '#F8FAFC' }}>Three Steps to Revenue</h2>
+                <p style={{ color: '#94A3B8', fontSize: '1.25rem', fontWeight: 500 }}>The easiest ad platform ever built.</p>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2.5rem' }}>
+                <StepCard 
+                  icon={<Target size={32} color="#38BDF8" />}
+                  color="rgba(56, 189, 248, 0.1)"
+                  border="#38BDF8"
+                  title="1. Tell us about it" 
+                  desc="Upload an image, video, or just describe your product. AI instantly generates copy, headlines, and stunning creatives."
+                />
+                <StepCard 
+                  icon={<Zap size={32} color="#A78BFA" />}
+                  color="rgba(167, 139, 250, 0.1)"
+                  border="#A78BFA"
+                  title="2. Set boundaries" 
+                  desc="We recommend a budget and audience, or you can take control. Tap approve to send the ads to our intelligent optimizer."
+                />
+                <StepCard 
+                  icon={<BarChart3 size={32} color="#34D399" />}
+                  color="rgba(52, 211, 153, 0.1)"
+                  border="#34D399"
+                  title="3. Watch it scale" 
+                  desc="We continuously monitor ad performance, pausing losers and pumping budget into the winners to maximize your ROI."
+                />
+              </div>
             </div>
-          </motion.div>
-          <motion.div variants={snapUpVariants} style={{ marginTop: '4rem', paddingTop: '2rem', borderTop: '2px solid rgba(255,255,255,0.2)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', textAlign: 'center', opacity: 0.5 }}>
-            © {new Date().getFullYear()} AIMARKET PRO. ALL SYSTEMS OPERATIONAL.
-          </motion.div>
-        </motion.div>
-      </Section>
+          </section>
 
+          {/* Social Proof */}
+          <section style={{ padding: '6rem 2rem', textAlign: 'center' }}>
+             <p style={{ textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, color: '#64748B', marginBottom: '2rem' }}>Currently optimizing ad spend across</p>
+             <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', flexWrap: 'wrap', opacity: 0.6, color: '#E2E8F0' }}>
+                 {['Meta Platforms', 'Google Performance Max', 'TikTok Ads Manager', 'X (Twitter) Ads'].map((brand, i) => (
+                     <h3 key={i} style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>{brand}</h3>
+                 ))}
+             </div>
+          </section>
+
+          {/* CTA */}
+          <section style={{ padding: '8rem 2rem 10rem', textAlign: 'center' }}>
+            <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.05)', padding: '5rem 2rem', borderRadius: '32px', maxWidth: '900px', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+                <h2 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', fontWeight: 900, lineHeight: 1.1, color: '#F8FAFC' }}>Stop managing ads. <br/>Start managing growth.</h2>
+                <button className="btn-primary" onClick={() => navigate('/create-ad')} style={{ padding: '1.25rem 3rem', fontSize: '1.25rem', background: '#F8FAFC', color: '#0F172A', border: 'none', boxShadow: '0 10px 25px rgba(255,255,255,0.1)', transition: 'transform 0.2s', marginTop: '1rem' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                Create Your Free Account
+                </button>
+            </div>
+          </section>
+      </main>
+
+      {/* Footer */}
+      <footer style={{ padding: '3rem 2rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#64748B', fontSize: '0.875rem', position: 'relative', zIndex: 10, backgroundColor: 'rgba(15, 23, 42, 0.8)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: '#E2E8F0' }}><Rocket size={16} color="#38BDF8" /> AIMarket Pro</div>
+        <div style={{ display: 'flex', gap: '2rem' }}>
+          <span style={{ cursor: 'pointer', fontWeight: 500 }}>Terms of Service</span>
+          <span style={{ cursor: 'pointer', fontWeight: 500 }}>Privacy Policy</span>
+        </div>
+      </footer>
     </div>
   )
 }
 
-// Subcomponents
-
-const FeatureBox = ({ icon, title, desc, inverted, color }) => {
-  const borderRule = `2px solid ${inverted ? 'var(--bg-primary)' : 'var(--border-color)'}`
-  return (
-    <motion.div 
-      initial="hidden" whileInView="visible" viewport={viewConf} variants={slamVariants}
-      style={{ padding: '4rem 2rem', borderRight: borderRule, borderBottom: borderRule, display: 'flex', flexDirection: 'column', gap: '1.5rem', background: inverted ? 'var(--text-primary)' : 'var(--bg-primary)' }}
-      whileHover={{ backgroundColor: inverted ? '#1a1a1a' : 'var(--bg-secondary)', transition: { duration: 0.1 } }}
-    >
-      <div style={{ color: color }}>{icon}</div>
-      <h2 style={{ fontSize: '2rem' }}>{title}</h2>
-      <p style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', lineHeight: 1.6 }}>{desc}</p>
-    </motion.div>
-  )
-}
-
-const PipelineStep = ({ num, title, desc, icon }) => (
-  <motion.div 
-    variants={strikeVariants} 
-    style={{ display: 'flex', alignItems: 'flex-start', gap: '2rem', padding: '2rem', border: '2px solid var(--border-color)', background: 'var(--bg-primary)', boxShadow: '6px 6px 0px 0px var(--border-color)' }}
-    whileHover={{ transform: 'translate(-8px, -8px)', boxShadow: '14px 14px 0px 0px var(--border-color)', transition: { duration: 0.1 } }}
+const StepCard = ({ icon, color, border, title, desc }) => (
+  <div style={{ 
+      padding: '2.5rem', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: '1.5rem', 
+      background: 'rgba(30, 41, 59, 0.6)', 
+      backdropFilter: 'blur(16px)', 
+      borderRadius: '24px', 
+      border: `1px solid rgba(255, 255, 255, 0.05)`,
+      borderTop: `4px solid ${border}`,
+      boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+      transition: 'transform 0.3s ease',
+      cursor: 'default'
+  }}
+  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-10px)'}
+  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
   >
-    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '3rem', fontWeight: 800, color: 'var(--text-primary)', WebkitTextStroke: '1px var(--text-tertiary)', color: 'transparent' }}>{num}</div>
-    <div style={{ flex: 1 }}>
-      <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        {icon} {title}
-      </h3>
-      <p style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{desc}</p>
+    <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {icon}
     </div>
-  </motion.div>
-)
-
-const MetricBox = ({ value, label, color, inverted }) => (
-  <motion.div variants={slamVariants} style={{ border: `2px solid ${inverted ? 'var(--bg-primary)' : 'var(--border-color)'}`, padding: '3rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: inverted ? 'var(--text-primary)' : 'var(--bg-primary)' }}>
-    <h3 style={{ fontSize: '5rem', color: color, margin: 0, lineHeight: 1 }}>{value}</h3>
-    <p style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', margin: 0, fontWeight: 700 }}>{label}</p>
-  </motion.div>
-)
-
-const TechBox = ({ name, type }) => (
-  <motion.div 
-    variants={strikeVariants} 
-    style={{ border: '2px solid var(--border-color)', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-primary)', boxShadow: '4px 4px 0px 0px var(--border-color)' }}
-    whileHover={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)', transform: 'skewX(-2deg)', transition: { duration: 0.1 } }}
-  >
-    <h3 style={{ fontSize: '1.8rem', margin: 0 }}>{name}</h3>
-    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, padding: '0.25rem 0.75rem', background: 'var(--accent-warning)', color: 'var(--text-primary)' }}>{type}</span>
-  </motion.div>
-)
-
-const FaqBox = ({ q, a, inverted }) => (
-  <motion.div variants={snapUpVariants} style={{ border: `2px solid ${inverted ? 'var(--bg-primary)' : 'var(--border-color)'}`, padding: '2rem', background: inverted ? 'var(--text-primary)' : 'var(--bg-primary)' }}>
-    <h3 style={{ fontSize: '1.5rem', marginBottom: '1rem', display: 'flex', gap: '1rem' }}><CheckCircle2 /> {q}</h3>
-    <p style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', margin: 0, opacity: 0.9 }}>{a}</p>
-  </motion.div>
+    <div>
+        <h3 style={{ fontSize: '1.5rem', margin: '0 0 0.75rem', fontWeight: 700, color: '#F8FAFC' }}>{title}</h3>
+        <p style={{ color: '#94A3B8', margin: 0, lineHeight: 1.6, fontSize: '1.05rem' }}>{desc}</p>
+    </div>
+  </div>
 )
 
 export default Landing
