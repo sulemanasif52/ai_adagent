@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
-import { Plus, ArrowRight, PlayCircle, PauseCircle, CheckCircle, Zap, ShieldCheck } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { Plus, PlayCircle, PauseCircle, CheckCircle, Zap, ShieldCheck, Instagram, ArrowRight } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { getPreferences, putPreferences, getIgPosts } from '../lib/server'
 
 const campaigns = [
   { id: 1, name: 'Summer Collection', status: 'Active', spend: '$240', performance: '142 clicks' },
@@ -36,7 +37,22 @@ const StatusBadge = ({ status }) => {
 
 const Dashboard = () => {
     const navigate = useNavigate()
-    const [optimizationMode, setOptimizationMode] = useState('auto')
+    const [optimizationMode, setOptimizationMode] = useState('manual')
+    const [recentPosts, setRecentPosts] = useState([])
+
+    useEffect(() => {
+        getPreferences()
+            .then(p => setOptimizationMode(p.optimization_mode || 'manual'))
+            .catch(() => {})
+        getIgPosts({ limit: 4 })
+            .then(r => setRecentPosts(r.posts || []))
+            .catch(() => {}) // IG not connected yet — silently hide widget
+    }, [])
+
+    const updateMode = mode => {
+        setOptimizationMode(mode)
+        putPreferences({ optimization_mode: mode }).catch(() => {})
+    }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -91,7 +107,7 @@ const Dashboard = () => {
                 <div className="card" style={{ padding: '2rem' }}>
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
                         <div 
-                            onClick={() => setOptimizationMode('auto')}
+                            onClick={() => updateMode('auto')}
                             style={{ 
                                 flex: 1, 
                                 border: `2px solid ${optimizationMode === 'auto' ? 'var(--accent-success)' : 'var(--border-color)'}`,
@@ -128,7 +144,7 @@ const Dashboard = () => {
                         </div>
 
                         <div 
-                            onClick={() => setOptimizationMode('manual')}
+                            onClick={() => updateMode('manual')}
                             style={{ 
                                 flex: 1, 
                                 border: `2px solid ${optimizationMode === 'manual' ? 'var(--accent-primary)' : 'var(--border-color)'}`,
@@ -182,6 +198,38 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {recentPosts.length > 0 && (
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem' }}>
+                        <h3 style={{ fontSize: '1.25rem', margin: 0, display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Instagram size={20} color="#E1306C" /> Recent Instagram posts
+                        </h3>
+                        <Link to="/analytics" style={{ fontSize: '0.875rem', color: 'var(--accent-primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            See all <ArrowRight size={14} />
+                        </Link>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem' }}>
+                        {recentPosts.map(p => (
+                            <a key={p.id} href={p.permalink || '#'} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                                    {(p.thumbnailUrl || p.mediaUrl) ? (
+                                        <img src={p.thumbnailUrl || p.mediaUrl} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
+                                    ) : (
+                                        <div style={{ aspectRatio: '1/1', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
+                                            <Instagram size={28} />
+                                        </div>
+                                    )}
+                                    <div style={{ padding: '0.6rem 0.75rem', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                                        <span>♥ {(p.likeCount || 0).toLocaleString()}</span>
+                                        <span>💬 {(p.commentsCount || 0).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            </a>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

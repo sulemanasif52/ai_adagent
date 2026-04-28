@@ -1,5 +1,15 @@
-node_modules
-dist
+node_modules/
+dist/
 .env
 .env.local
-node_modules
+.env.production
+*.log
+railway-secrets.local.txt
+
+# server-side
+server/node_modules/
+server/.env
+server/dev.db
+server/dev.db-journal
+server/prisma/dev.db
+server/prisma/dev.db-journal

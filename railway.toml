@@ -1,7 +1,9 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npm run build"
+buildCommand = "npm run build:all"
 
 [deploy]
-startCommand = "npx serve dist --listen $PORT"
+startCommand = "npm run start:prod"
 restartPolicyType = "ON_FAILURE"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30

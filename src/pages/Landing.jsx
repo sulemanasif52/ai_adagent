@@ -31,10 +31,10 @@ const Landing = () => {
             </h1>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', color: '#94A3B8' }} onClick={() => navigate('/dashboard')}>Log In</span>
-            <button onClick={() => navigate('/create-ad')} className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontSize: '0.875rem', color: '#0F172A', background: 'linear-gradient(135deg, #38BDF8, #A78BFA)' }}>
+            <a href="/api/auth/facebook" style={{ fontWeight: 600, fontSize: '0.875rem', color: '#94A3B8', textDecoration: 'none' }}>Log In</a>
+            <a href="/api/auth/facebook" className="btn-primary" style={{ padding: '0.6rem 1.5rem', fontSize: '0.875rem', color: '#0F172A', background: 'linear-gradient(135deg, #38BDF8, #A78BFA)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Get Started
-            </button>
+            </a>
         </div>
       </nav>
 
@@ -56,9 +56,9 @@ const Landing = () => {
               </p>
               
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                <button className="btn-primary" onClick={() => navigate('/create-ad')} style={{ padding: '1rem 2.5rem', fontSize: '1.125rem', background: 'linear-gradient(90deg, #38BDF8, #A78BFA)', color: '#0F172A', boxShadow: '0 10px 25px rgba(56, 189, 248, 0.2)', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                  Launch a Campaign <ArrowRight size={20} style={{ marginLeft: '0.5rem' }} />
-                </button>
+                <a href="/api/auth/facebook" className="btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.125rem', background: 'linear-gradient(90deg, #38BDF8, #A78BFA)', color: '#0F172A', boxShadow: '0 10px 25px rgba(56, 189, 248, 0.2)', transition: 'transform 0.2s', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                  Log in with Facebook <ArrowRight size={20} style={{ marginLeft: '0.5rem' }} />
+                </a>
               </div>
             </motion.div>
           </section>
@@ -111,9 +111,9 @@ const Landing = () => {
           <section style={{ padding: '8rem 2rem 10rem', textAlign: 'center' }}>
             <div style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.05)', padding: '5rem 2rem', borderRadius: '32px', maxWidth: '900px', margin: '0 auto', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
                 <h2 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', fontWeight: 900, lineHeight: 1.1, color: '#F8FAFC' }}>Stop managing ads. <br/>Start managing growth.</h2>
-                <button className="btn-primary" onClick={() => navigate('/create-ad')} style={{ padding: '1.25rem 3rem', fontSize: '1.25rem', background: '#F8FAFC', color: '#0F172A', border: 'none', boxShadow: '0 10px 25px rgba(255,255,255,0.1)', transition: 'transform 0.2s', marginTop: '1rem' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                <a href="/api/auth/facebook" className="btn-primary" style={{ padding: '1.25rem 3rem', fontSize: '1.25rem', background: '#F8FAFC', color: '#0F172A', border: 'none', boxShadow: '0 10px 25px rgba(255,255,255,0.1)', transition: 'transform 0.2s', marginTop: '1rem', textDecoration: 'none', display: 'inline-block' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                 Create Your Free Account
-                </button>
+                </a>
             </div>
           </section>
       </main>

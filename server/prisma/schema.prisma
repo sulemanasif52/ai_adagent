@@ -1,0 +1,148 @@
+// AIMarket Pro — local dev schema (SQLite). Swap `sqlite` → `postgresql` for prod.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  fbUserId  String   @unique
+  email     String?
+  name      String
+  avatarUrl String?
+
+  metaCredential MetaCredential?
+  byokKeys       ByokKey?
+  preferences    Preferences?
+  igPosts        IgPost[]
+  snapshots      AnalyticsSnapshot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MetaCredential {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // long-lived user access token (encrypted)
+  accessToken String
+  scopes      String
+
+  // resolved after first login (Phase 2)
+  pageId              String?
+  pageName            String?
+  pageAccessToken     String? // encrypted
+  igBusinessAccountId String?
+  igUsername          String?
+  lastSyncedAt        DateTime?
+
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model ByokKey {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // all encrypted at rest
+  anthropicKey      String?
+  falKey            String?
+  cloudflareToken   String?
+  cloudflareAccount String?
+  hfToken           String?
+  groqKey           String?
+  igToken           String?
+  igUserId          String?
+
+  updatedAt DateTime @updatedAt
+}
+
+model Preferences {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  optimizationMode String  @default("manual")
+  alertBudget      Boolean @default(true)
+  alertPerformance Boolean @default(true)
+  alertScale       Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String
+  expiresAt DateTime
+}
+
+// Hourly snapshot of account-level IG metrics. Lets us show trends without
+// re-hitting the Graph API every page load, and gives a history for charts.
+model AnalyticsSnapshot {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  igBusinessId String
+  takenAt      DateTime @default(now())
+
+  // JSON: { followers_count, follows_count, media_count, reach, impressions, profile_views, ... }
+  accountMetrics String
+
+  // JSON: optional audience breakdown (country, age_gender) — populated when available
+  audienceMetrics String?
+
+  @@index([userId, takenAt])
+}
+
+// Cached per-post data + insights. Refreshed by /api/instagram/sync.
+model IgPost {
+  id     String @id // IG media ID
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  caption       String?
+  mediaType     String  // IMAGE | VIDEO | CAROUSEL_ALBUM | REELS
+  mediaUrl      String?
+  permalink     String?
+  thumbnailUrl  String?
+  timestamp     DateTime
+  likeCount     Int     @default(0)
+  commentsCount Int     @default(0)
+
+  // JSON: per-post insights (engagement, reach, impressions, saved, video_views, ...)
+  insightsJson String?
+  insightsAt   DateTime?
+
+  fetchedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments IgComment[]
+
+  @@index([userId, timestamp])
+}
+
+// Cached comments for posts. Phase 3 will add per-comment sentiment in a
+// separate IgCommentAnalysis table so we can re-classify without re-fetching.
+model IgComment {
+  id     String @id // IG comment ID
+  postId String
+  post   IgPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  text      String
+  username  String?
+  timestamp DateTime
+  likeCount Int     @default(0)
+
+  fetchedAt DateTime @default(now())
+
+  @@index([postId, timestamp])
+}

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Bell, User, ChevronDown, AlertTriangle, TrendingUp, CheckCircle } from 'lucide-react'
+import { Bell, AlertTriangle, TrendingUp, CheckCircle, LogOut } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
+import { useAuth } from '../lib/auth-context'
+import { logout } from '../lib/server'
 
 const notifications = [
     { id: 1, type: 'warning', title: 'Budget Limit Reached', desc: 'Campaign "Summer Retargeting" has reached its daily limit.', time: '10m ago', icon: AlertTriangle, color: 'var(--accent-warning)' },
@@ -8,28 +10,39 @@ const notifications = [
     { id: 3, type: 'info', title: 'Optimization Applied', desc: 'Paused underperforming asset #3 in YouTube preroll ad.', time: '2h ago', icon: CheckCircle, color: 'var(--accent-primary)' }
 ]
 
+const initials = (name = '') =>
+    name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('') || '?'
+
 const Header = () => {
     const location = useLocation()
     const path = location.pathname.split('/')[1]
     const title = path ? path.charAt(0).toUpperCase() + path.slice(1).replace('-', ' ') : 'Dashboard'
-    
+
+    const { user, refresh } = useAuth()
     const [showNotif, setShowNotif] = useState(false)
+    const [showMenu, setShowMenu] = useState(false)
     const notifRef = useRef(null)
+    const menuRef = useRef(null)
 
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotif(false)
+            if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false)
         }
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
+    const handleLogout = async () => {
+        try { await logout() } finally { await refresh(); window.location.href = '/' }
+    }
+
     return (
-        <header style={{ 
-            height: 'var(--header-height)', 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
+        <header style={{
+            height: 'var(--header-height)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             padding: '0 3rem',
             background: 'var(--bg-primary)',
             backdropFilter: 'blur(12px)',
@@ -39,7 +52,7 @@ const Header = () => {
             zIndex: 40
         }}>
             <h2 style={{ fontSize: '1.25rem', margin: 0, fontWeight: 600 }}>{title}</h2>
-            
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                 <div style={{ position: 'relative' }} ref={notifRef}>
                     <button onClick={() => setShowNotif(!showNotif)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', position: 'relative', cursor: 'pointer', padding: '0.25rem' }}>
@@ -76,14 +89,30 @@ const Header = () => {
                     )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1.5rem', borderLeft: '1px solid var(--border-color)', cursor: 'pointer' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #38BDF8, #A78BFA)', color: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                        SJ
+                <div ref={menuRef} style={{ position: 'relative' }}>
+                    <div onClick={() => setShowMenu(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1.5rem', borderLeft: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                        {user?.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #38BDF8, #A78BFA)', color: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                                {initials(user?.name)}
+                            </div>
+                        )}
+                        <div>
+                            <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>{user?.name || 'Loading…'}</p>
+                            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{user?.email || ''}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600 }}>Sarah Jenkins</p>
-                        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pro Plan</p>
-                    </div>
+
+                    {showMenu && (
+                        <div className="card" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.5rem', minWidth: '180px', padding: '0.5rem', zIndex: 50, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                            <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', padding: '0.6rem 0.75rem', border: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: '0.875rem', cursor: 'pointer', borderRadius: 'var(--radius-sm)', textAlign: 'left' }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                <LogOut size={16} /> Log out
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </header>

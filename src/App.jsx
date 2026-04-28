@@ -1,11 +1,9 @@
 import React, { useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Settings from './components/Settings'
-import Chatbot from './components/Chatbot'
 
-// Pages
 import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
 import CreateAd from './pages/CreateAd'
@@ -14,13 +12,31 @@ import CRM from './pages/CRM'
 import Billing from './pages/Billing'
 import AdClick from './pages/AdClick'
 
+import { AuthProvider, useAuth } from './lib/auth-context'
+
+function FullPageLoader() {
+    return (
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            Loading…
+        </div>
+    )
+}
+
+function RequireAuth({ children }) {
+    const { user, loading } = useAuth()
+    const location = useLocation()
+    if (loading) return <FullPageLoader />
+    if (!user) return <Navigate to="/" replace state={{ from: location.pathname }} />
+    return children
+}
+
 function DashboardLayout({ children }) {
     const [settingsOpen, setSettingsOpen] = useState(false)
 
     return (
-        <div style={{ 
-            display: 'flex', 
-            minHeight: '100vh', 
+        <div style={{
+            display: 'flex',
+            minHeight: '100vh',
             backgroundColor: 'var(--bg-primary)',
         }}>
             <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
@@ -37,24 +53,21 @@ function DashboardLayout({ children }) {
 
 function App() {
     return (
-        <Routes>
-            <Route path="/" element={<Landing />} />
-            
-            {/* Public ad click landing page */}
-            <Route path="/ad" element={<AdClick />} />
+        <AuthProvider>
+            <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/ad" element={<AdClick />} />
 
-            {/* Wrapped dashboard routes */}
-            <Route path="/dashboard" element={<DashboardLayout><Dashboard /></DashboardLayout>} />
-            <Route path="/create-ad" element={<DashboardLayout><CreateAd /></DashboardLayout>} />
-            <Route path="/analytics" element={<DashboardLayout><Analytics /></DashboardLayout>} />
-            <Route path="/crm" element={<DashboardLayout><CRM /></DashboardLayout>} />
-            <Route path="/billing" element={<DashboardLayout><Billing /></DashboardLayout>} />
-            
-            {/* Catch-all fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+                <Route path="/dashboard" element={<RequireAuth><DashboardLayout><Dashboard /></DashboardLayout></RequireAuth>} />
+                <Route path="/create-ad" element={<RequireAuth><DashboardLayout><CreateAd /></DashboardLayout></RequireAuth>} />
+                <Route path="/analytics" element={<RequireAuth><DashboardLayout><Analytics /></DashboardLayout></RequireAuth>} />
+                <Route path="/crm" element={<RequireAuth><DashboardLayout><CRM /></DashboardLayout></RequireAuth>} />
+                <Route path="/billing" element={<RequireAuth><DashboardLayout><Billing /></DashboardLayout></RequireAuth>} />
+
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+        </AuthProvider>
     )
 }
 
 export default App
-
