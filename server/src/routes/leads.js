@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth/middleware.js'
 import { prisma } from '../db.js'
-import { sendLeadEmail } from '../lib/email.js'
+import { sendLeadEmail, sendLeadAutoReply } from '../lib/email.js'
 
 const router = Router()
 
@@ -67,7 +67,8 @@ router.post('/', asyncRoute(async (req, res) => {
       message: `${lead.email}${lead.source ? ` · ${lead.source}` : ''}`,
     },
   }).catch(err => console.warn('[leads] notification create failed:', err.message))
-  sendLeadEmail(userId, lead).catch(err => console.warn('[leads] email failed:', err.message))
+  sendLeadEmail(userId, lead).catch(err => console.warn('[leads] notify email failed:', err.message))
+  sendLeadAutoReply(userId, lead).catch(err => console.warn('[leads] auto-reply failed:', err.message))
 
   res.status(201).json({ lead })
 }))

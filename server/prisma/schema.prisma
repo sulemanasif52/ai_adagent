@@ -77,10 +77,11 @@ model Preferences {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  optimizationMode String  @default("manual")
-  alertBudget      Boolean @default(true)
-  alertPerformance Boolean @default(true)
-  alertScale       Boolean @default(true)
+  optimizationMode  String  @default("manual")
+  alertBudget       Boolean @default(true)
+  alertPerformance  Boolean @default(true)
+  alertScale        Boolean @default(true)
+  notificationEmail String?
 
   updatedAt DateTime @updatedAt
 }

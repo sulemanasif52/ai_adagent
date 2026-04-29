@@ -606,26 +606,33 @@ const CreateAd = () => {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                                                 <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #38BDF8, #A78BFA)' }}></div>
                                                 <div>
-                                                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>Your Brand Name</p>
+                                                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>{productName || 'Your Brand Name'}</p>
                                                     <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Sponsored</p>
                                                 </div>
                                             </div>
-                                            
-                                            <p style={{ fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1rem' }}>
-                                                Check out our incredible newest release! Designed specifically to help you stand out. 🚀🔥
-                                                {productDesc && <span style={{ color: 'var(--text-secondary)' }}> Mentioning: {productDesc.substring(0, 50)}...</span>}
+
+                                            <p style={{ fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1rem', whiteSpace: 'pre-wrap' }}>
+                                                {analysis?.copy?.body
+                                                    ? analysis.copy.body
+                                                    : (productDesc || 'Click "Analyze & Generate Ad" on Step 1 to produce AI copy.')}
                                             </p>
 
-                                            <div style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-color)', minHeight: '180px', marginBottom: '1rem' }}>
-                                                <ImageIcon size={48} color="var(--text-tertiary)" opacity={0.5} />
+                                            <div style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-color)', minHeight: '180px', marginBottom: '1rem', overflow: 'hidden' }}>
+                                                {generatedImageUrl ? (
+                                                    <img src={generatedImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : uploadedImages[0]?.url ? (
+                                                    <img src={uploadedImages[0].url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <ImageIcon size={48} color="var(--text-tertiary)" opacity={0.5} />
+                                                )}
                                             </div>
 
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
                                                 <div>
-                                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>NEW ARRIVAL</p>
-                                                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>Shop the Premium Collection</p>
+                                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{analysis?.copy?.cta || 'New arrival'}</p>
+                                                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem' }}>{analysis?.copy?.headlines?.[0] || productName || 'Shop the Premium Collection'}</p>
                                                 </div>
-                                                <button onClick={() => window.open('/ad?product=summer-collection', '_blank')} style={{ padding: '0.5rem 1rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-primary)' }}>Shop Now</button>
+                                                <button onClick={() => window.open('/ad?product=summer-collection', '_blank')} style={{ padding: '0.5rem 1rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', color: 'var(--text-primary)' }}>{analysis?.copy?.cta || 'Shop Now'}</button>
                                             </div>
                                         </div>
                                     </div>

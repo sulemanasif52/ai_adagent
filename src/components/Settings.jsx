@@ -25,6 +25,7 @@ const alertPrefs = [
 const Settings = ({ open, onClose }) => {
   const [vals, setVals] = useState({})
   const [alerts, setAlerts] = useState({ alert_budget: true, alert_performance: true, alert_scale: true })
+  const [notificationEmail, setNotificationEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -46,6 +47,7 @@ const Settings = ({ open, onClose }) => {
           alert_performance: !!p.alert_performance,
           alert_scale: !!p.alert_scale,
         })
+        setNotificationEmail(p.notification_email || '')
       })
       .catch(e => { if (!cancelled) setError(e.message || 'Failed to load settings.') })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -55,7 +57,10 @@ const Settings = ({ open, onClose }) => {
   const handleSave = async () => {
     setSaving(true); setError('')
     try {
-      await Promise.all([putSettings(vals), putPreferences(alerts)])
+      await Promise.all([
+        putSettings(vals),
+        putPreferences({ ...alerts, notification_email: notificationEmail }),
+      ])
       setSaved(true)
       setTimeout(() => { setSaved(false); onClose() }, 700)
     } catch (e) {
@@ -119,6 +124,20 @@ const Settings = ({ open, onClose }) => {
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', fontSize: '1.25rem' }}>
             <Bell size={20} color="var(--accent-primary)" /> Notification Preferences
           </h2>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontWeight: 500, fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              Lead notification email <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(overrides your Facebook email)</span>
+            </label>
+            <input
+              type="email"
+              value={notificationEmail}
+              onChange={e => setNotificationEmail(e.target.value)}
+              placeholder="leads@yourdomain.com"
+              className="input-base"
+            />
+            <p style={{ margin: '0.4rem 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Where lead-captured alerts are sent. Leave blank to use your Facebook account email.</p>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {alertPrefs.map(pref => (
               <label key={pref.key} style={{
