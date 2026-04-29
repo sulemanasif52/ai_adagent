@@ -18,9 +18,15 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
+    "ml-kmeans": "^7.0.0",
+    "ml-regression-multivariate-linear": "^2.0.4",
     "morgan": "^1.10.0",
+    "msedge-tts": "^2.0.5",
+    "multer": "^2.1.1",
+    "node-cron": "^4.2.1",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
+    "simple-statistics": "^7.8.9",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -3,11 +3,15 @@ import { X, Key, Save, ExternalLink, Bell, Loader2 } from 'lucide-react'
 import { getSettings, putSettings, getPreferences, putPreferences } from '../lib/server'
 
 const fields = [
-  { key: 'anthropic_key',     label: 'Anthropic API Key',          link: 'https://console.anthropic.com/settings/keys', hint: 'Powers chat, ad copy, recommendations' },
-  { key: 'fal_key',           label: 'fal.ai Key',                 link: 'https://fal.ai/dashboard/keys',               hint: 'Powers image generation' },
+  { key: 'groq_key',          label: 'Groq API Key',               link: 'https://console.groq.com/keys',               hint: 'Free LLM — powers chatbot + classifiers (recommended)' },
+  { key: 'gemini_key',        label: 'Google Gemini API Key',      link: 'https://aistudio.google.com/apikey',          hint: 'Free LLM — backup for chat + analysis' },
+  { key: 'anthropic_key',     label: 'Anthropic Claude API Key',   link: 'https://console.anthropic.com/settings/keys', hint: 'Best quality copy + script generation (paid)' },
+  { key: 'resend_key',        label: 'Resend API Key',             link: 'https://resend.com/api-keys',                 hint: 'Email when a lead is captured (free 3k/mo)' },
+  { key: 'news_api_key',      label: 'NewsAPI Key',                link: 'https://newsapi.org/account',                 hint: 'Trends page news feed (free 100/day)' },
   { key: 'cloudflare_token',  label: 'Cloudflare Workers AI Token', link: 'https://dash.cloudflare.com/profile/api-tokens', hint: 'Free image gen fallback' },
   { key: 'cloudflare_account', label: 'Cloudflare Account ID',     link: '',                                            hint: 'Needed for Cloudflare AI' },
   { key: 'hf_token',          label: 'HuggingFace Token (optional)', link: 'https://huggingface.co/settings/tokens',    hint: 'Free image gen fallback' },
+  { key: 'fal_key',           label: 'fal.ai Key (optional)',      link: 'https://fal.ai/dashboard/keys',               hint: 'Premium image/video gen — not required' },
   { key: 'ig_token',          label: 'Instagram Access Token (manual fallback)', link: 'https://developers.facebook.com', hint: 'Auto-populated when you Connect Instagram' },
   { key: 'ig_user_id',        label: 'Instagram Business Account ID', link: '',                                          hint: 'Auto-populated when you Connect Instagram' },
 ]

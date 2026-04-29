@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, PlusCircle, BarChart3, CreditCard, Users, Settings as SettingsIcon } from 'lucide-react'
+import { LayoutDashboard, PlusCircle, BarChart3, CreditCard, Users, Settings as SettingsIcon, TrendingUp } from 'lucide-react'
 
 const Sidebar = ({ onOpenSettings }) => {
     const location = useLocation()
@@ -9,6 +9,7 @@ const Sidebar = ({ onOpenSettings }) => {
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/create-ad', label: 'Create Ad', icon: PlusCircle },
         { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+        { path: '/trends',    label: 'Market Pulse', icon: TrendingUp },
         { path: '/crm', label: 'Leads / CRM', icon: Users },
         { path: '/billing', label: 'Billing', icon: CreditCard },
     ]

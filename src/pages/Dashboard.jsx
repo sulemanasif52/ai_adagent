@@ -1,44 +1,36 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, PlayCircle, PauseCircle, CheckCircle, Zap, ShieldCheck, Instagram, ArrowRight } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
-import { getPreferences, putPreferences, getIgPosts } from '../lib/server'
+import { getPreferences, putPreferences, getIgPosts, listCampaigns, listRecommendations } from '../lib/server'
 
-const campaigns = [
-  { id: 1, name: 'Summer Collection', status: 'Active', spend: '$240', performance: '142 clicks' },
-  { id: 2, name: 'Retargeting - Cart Abandoners', status: 'Active', spend: '$85', performance: '12 conversions' },
-  { id: 3, name: 'Brand Awareness Q1', status: 'Completed', spend: '$1,200', performance: '45k impressions' },
-]
+const STATUS_STYLES = {
+    active:    { color: 'var(--accent-success)', bg: 'rgba(16, 185, 129, 0.1)', Icon: PlayCircle, label: 'Active' },
+    archived:  { color: 'var(--text-secondary)', bg: 'var(--bg-tertiary)',       Icon: CheckCircle, label: 'Archived' },
+    paused:    { color: 'var(--accent-warning)', bg: 'rgba(245, 158, 11, 0.1)', Icon: PauseCircle, label: 'Paused' },
+    draft:     { color: 'var(--text-tertiary)', bg: 'var(--bg-tertiary)',        Icon: PauseCircle, label: 'Draft' },
+}
 
 const StatusBadge = ({ status }) => {
-    let color = 'var(--text-secondary)'
-    let bg = 'var(--bg-tertiary)'
-    let Icon = PlayCircle
-
-    if (status === 'Active') {
-        color = 'var(--accent-success)'
-        bg = 'rgba(16, 185, 129, 0.1)'
-        Icon = PlayCircle
-    } else if (status === 'Completed') {
-        color = 'var(--text-secondary)'
-        bg = 'var(--bg-tertiary)'
-        Icon = CheckCircle
-    } else if (status === 'Paused') {
-        color = 'var(--accent-warning)'
-        bg = 'rgba(245, 158, 11, 0.1)'
-        Icon = PauseCircle
-    }
-
+    const s = STATUS_STYLES[status?.toLowerCase()] || STATUS_STYLES.draft
+    const { color, bg, Icon, label } = s
     return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.6rem', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', fontWeight: 600, color: color, background: bg }}>
-            <Icon size={12} /> {status}
+            <Icon size={12} /> {label}
         </span>
     )
 }
+
+const fmtMoney = n => n == null ? '—' : `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+const fmtPct   = n => n == null ? '—' : `${(Number(n) * 100).toFixed(0)}%`
 
 const Dashboard = () => {
     const navigate = useNavigate()
     const [optimizationMode, setOptimizationMode] = useState('manual')
     const [recentPosts, setRecentPosts] = useState([])
+    const [campaigns, setCampaigns] = useState([])
+    const [campaignsLoading, setCampaignsLoading] = useState(true)
+    const [campaignsError, setCampaignsError] = useState('')
+    const [recs, setRecs] = useState([])
 
     useEffect(() => {
         getPreferences()
@@ -47,6 +39,13 @@ const Dashboard = () => {
         getIgPosts({ limit: 4 })
             .then(r => setRecentPosts(r.posts || []))
             .catch(() => {}) // IG not connected yet — silently hide widget
+        listCampaigns({ limit: 50 })
+            .then(r => setCampaigns(r.campaigns || []))
+            .catch(e => setCampaignsError(e.message))
+            .finally(() => setCampaignsLoading(false))
+        listRecommendations({ active: '1' })
+            .then(r => setRecs(r.recommendations || []))
+            .catch(() => {})
     }, [])
 
     const updateMode = mode => {
@@ -68,26 +67,32 @@ const Dashboard = () => {
             {/* Campaign List */}
             <div>
                 <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Active & Recent Campaigns</h3>
-                
-                {campaigns.length > 0 ? (
+
+                {campaignsLoading ? (
+                    <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>Loading…</div>
+                ) : campaignsError ? (
+                    <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--accent-warning)' }}>{campaignsError}</div>
+                ) : campaigns.length > 0 ? (
                     <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
                         <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
                                         <th style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>Campaign</th>
                                         <th style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>Status</th>
                                         <th style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>Spend</th>
-                                        <th style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>Performance</th>
+                                        <th style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>Leads</th>
+                                        <th style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontWeight: 500, fontSize: '0.875rem' }}>ROI</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {campaigns.map((campaign) => (
-                                        <tr key={campaign.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                            <td style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>{campaign.name}</td>
-                                            <td style={{ padding: '1.25rem 1.5rem' }}><StatusBadge status={campaign.status} /></td>
-                                            <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-secondary)' }}>{campaign.spend}</td>
-                                            <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-secondary)' }}>{campaign.performance}</td>
+                                    {campaigns.map((c) => (
+                                        <tr key={c.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                            <td style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>{c.name}</td>
+                                            <td style={{ padding: '1.25rem 1.5rem' }}><StatusBadge status={c.status} /></td>
+                                            <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-secondary)' }}>{fmtMoney(c.summary?.spend)}</td>
+                                            <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-secondary)' }}>{c.summary?.leads ?? 0}</td>
+                                            <td style={{ padding: '1.25rem 1.5rem', color: c.summary?.roi > 0 ? 'var(--accent-success)' : 'var(--text-secondary)' }}>{fmtPct(c.summary?.roi)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -100,6 +105,27 @@ const Dashboard = () => {
                     </div>
                 )}
             </div>
+
+            {/* Recommendations panel */}
+            {recs.length > 0 && (
+                <div>
+                    <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Zap size={20} color="var(--accent-warning)" /> AI Insights
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                        {recs.slice(0, 6).map(r => (
+                            <div key={r.id} className="card" style={{
+                                padding: '1.25rem',
+                                borderLeft: `3px solid ${r.severity === 'critical' ? '#EF4444' : r.severity === 'warn' ? 'var(--accent-warning)' : 'var(--accent-primary)'}`,
+                            }}>
+                                <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', marginBottom: '0.4rem' }}>{r.type}</div>
+                                <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.4rem' }}>{r.title}</div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{r.message}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Optimization Mode Toggle */}
             <div>

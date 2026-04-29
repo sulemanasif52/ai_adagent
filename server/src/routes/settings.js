@@ -15,6 +15,9 @@ const FIELDS = {
   cloudflare_account:{ col: 'cloudflareAccount', secret: false },
   hf_token:          { col: 'hfToken',           secret: true },
   groq_key:          { col: 'groqKey',           secret: true },
+  gemini_key:        { col: 'geminiKey',         secret: true },
+  resend_key:        { col: 'resendKey',         secret: true },
+  news_api_key:      { col: 'newsApiKey',        secret: true },
   ig_token:          { col: 'igToken',           secret: true },
   ig_user_id:        { col: 'igUserId',          secret: false },
 }

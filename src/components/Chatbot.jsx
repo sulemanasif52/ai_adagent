@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Bot, User } from 'lucide-react'
+import { MessageCircle, X, Send, Bot, User, Wrench } from 'lucide-react'
 
 const initialMessages = [
-    { id: 1, text: "Hi there! 👋 I'm your AI Market Pro assistant. Need help setting up your campaign or choosing the right platforms?", sender: 'bot' }
+    { id: 1, text: "Hi! I'm grounded on your real Instagram and campaign data. Ask me things like \"How is my IG doing this week?\", \"What's my best post?\", or \"Show me my latest leads.\"", sender: 'bot' }
 ]
 
 const Chatbot = ({ mode = 'floating', isOpenTrigger = false }) => {
@@ -33,33 +33,76 @@ const Chatbot = ({ mode = 'floating', isOpenTrigger = false }) => {
         if (isOpenTrigger && isFloating) setIsOpen(true)
     }, [isOpenTrigger, isFloating])
 
-    const handleSend = (e) => {
+    const handleSend = async (e) => {
         e.preventDefault()
-        if (!inputValue.trim()) return
+        const text = inputValue.trim()
+        if (!text || isTyping) return
 
-        // 1. Add user message
-        const newUserMsg = { id: Date.now(), text: inputValue, sender: 'user' }
-        setMessages(prev => [...prev, newUserMsg])
+        const userMsg = { id: Date.now(), text, sender: 'user' }
+        const botId = Date.now() + 1
+        const botMsg = { id: botId, text: '', sender: 'bot', tools: [] }
+        setMessages(prev => [...prev, userMsg, botMsg])
         setInputValue('')
         setIsTyping(true)
 
-        // 2. Mock Bot Response based on context
-        setTimeout(() => {
-            const botResponseText = generateBotResponse(newUserMsg.text.toLowerCase())
-            const newBotMsg = { id: Date.now() + 1, text: botResponseText, sender: 'bot' }
-            setMessages(prev => [...prev, newBotMsg])
-            setIsTyping(false)
-            scrollToBottom()
-        }, 1200)
-    }
+        // Build the conversation history we send to the server. Include only
+        // user/assistant messages with content; skip the initial greeting if
+        // we want the model to focus on the new turn (we keep it for context).
+        const history = [...messages, userMsg]
+            .filter(m => m.text)
+            .map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text }))
 
-    const generateBotResponse = (prompt) => {
-        if (prompt.includes('budget') || prompt.includes('spend')) return 'We recommend a minimum daily budget of $20 per platform to give our AI enough data to optimize efficiently.'
-        if (prompt.includes('image') || prompt.includes('video') || prompt.includes('size')) return 'For best results, upload standard feed sizes: 1080x1080 (1:1) for FB/Insta images, or 1080x1920 (9:16) for TikToks and Reels.'
-        if (prompt.includes('target') || prompt.includes('location')) return 'If you choose "AI Location", we will automatically target regions with historically high engagement for your industry. Or, you can manually select a specific city and set a radius!'
-        if (prompt.includes('simple')) return 'In Simple Mode, you just give us your product image, and our AI automatically handles all the targeting and network placements behind the scenes!'
-        if (prompt.includes('creative') || prompt.includes('ad')) return 'Our system will digest your product description and automatically generate 3-5 variations of engaging copy, plus create stunning visual mockups!'
-        return "I can definitely help with that! If you need specific instructions on setting up your ad, try asking me about budgets, locations, or asset sizes."
+        try {
+            const res = await fetch('/api/chat/completions', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: history }),
+            })
+
+            if (!res.ok || !res.body) {
+                let errMsg = `Chat error (${res.status})`
+                try { const data = await res.json(); errMsg = data?.error || errMsg } catch {}
+                setMessages(prev => prev.map(m => m.id === botId ? { ...m, text: `⚠ ${errMsg}` } : m))
+                setIsTyping(false)
+                return
+            }
+
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            let accumulated = ''
+            let toolsUsed = []
+
+            while (true) {
+                const { value, done } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split('\n\n')
+                buffer = lines.pop() || ''
+                for (const line of lines) {
+                    if (!line.startsWith('data:')) continue
+                    const payload = line.slice(5).trim()
+                    if (!payload) continue
+                    let parsed
+                    try { parsed = JSON.parse(payload) } catch { continue }
+                    if (parsed.type === 'text') {
+                        accumulated += parsed.delta || ''
+                        setMessages(prev => prev.map(m => m.id === botId ? { ...m, text: accumulated, tools: toolsUsed } : m))
+                    } else if (parsed.type === 'tool_start') {
+                        toolsUsed = [...toolsUsed, parsed.name]
+                        setMessages(prev => prev.map(m => m.id === botId ? { ...m, tools: toolsUsed } : m))
+                    } else if (parsed.type === 'error') {
+                        accumulated = (accumulated || '') + `\n⚠ ${parsed.error}`
+                        setMessages(prev => prev.map(m => m.id === botId ? { ...m, text: accumulated } : m))
+                    }
+                }
+            }
+        } catch (err) {
+            setMessages(prev => prev.map(m => m.id === botId ? { ...m, text: `⚠ ${err.message || 'Connection failed'}` } : m))
+        } finally {
+            setIsTyping(false)
+        }
     }
 
     const containerStyle = isFloating ? {
@@ -117,7 +160,16 @@ const Chatbot = ({ mode = 'floating', isOpenTrigger = false }) => {
                     {/* Messages Area */}
                     <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-primary)' }}>
                         {messages.map(msg => (
-                            <div key={msg.id} style={{ display: 'flex', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
+                            <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start', gap: '0.25rem' }}>
+                                {msg.sender === 'bot' && msg.tools && msg.tools.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.15rem' }}>
+                                        {msg.tools.map((t, i) => (
+                                            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', padding: '0.1rem 0.5rem', borderRadius: '999px', background: 'rgba(167, 139, 250, 0.15)', color: '#A78BFA', fontWeight: 600 }}>
+                                                <Wrench size={9} /> {t}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                                 <div style={{
                                     maxWidth: '85%',
                                     padding: '0.85rem 1rem',
@@ -128,16 +180,17 @@ const Chatbot = ({ mode = 'floating', isOpenTrigger = false }) => {
                                     color: msg.sender === 'user' ? 'white' : 'var(--text-primary)',
                                     boxShadow: '0 2px 5px rgba(0,0,0,0.05)',
                                     fontSize: '0.875rem',
-                                    lineHeight: 1.5
+                                    lineHeight: 1.5,
+                                    whiteSpace: 'pre-wrap',
                                 }}>
-                                    {msg.text}
+                                    {msg.text || (isTyping && msg.id === messages[messages.length - 1]?.id ? '…' : '')}
                                 </div>
                             </div>
                         ))}
-                        {isTyping && (
+                        {isTyping && messages[messages.length - 1]?.text === '' && (
                             <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                                 <div style={{ background: 'var(--bg-secondary)', padding: '0.85rem 1rem', borderRadius: '1.25rem', borderBottomLeftRadius: '0' }}>
-                                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>AI is typing...</span>
+                                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Thinking…</span>
                                 </div>
                             </div>
                         )}

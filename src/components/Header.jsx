@@ -1,14 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Bell, AlertTriangle, TrendingUp, CheckCircle, LogOut } from 'lucide-react'
+import { Bell, AlertTriangle, TrendingUp, CheckCircle, LogOut, Info } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth-context'
-import { logout } from '../lib/server'
+import { logout, listNotifications, markNotificationsRead } from '../lib/server'
 
-const notifications = [
-    { id: 1, type: 'warning', title: 'Budget Limit Reached', desc: 'Campaign "Summer Retargeting" has reached its daily limit.', time: '10m ago', icon: AlertTriangle, color: 'var(--accent-warning)' },
-    { id: 2, type: 'success', title: 'Scaling Opportunity', desc: 'AI detected high ROI in Texas. Recommend increasing budget.', time: '1h ago', icon: TrendingUp, color: 'var(--accent-success)' },
-    { id: 3, type: 'info', title: 'Optimization Applied', desc: 'Paused underperforming asset #3 in YouTube preroll ad.', time: '2h ago', icon: CheckCircle, color: 'var(--accent-primary)' }
-]
+const TYPE_META = {
+    alert:   { icon: AlertTriangle, color: 'var(--accent-warning)' },
+    success: { icon: TrendingUp,    color: 'var(--accent-success)' },
+    info:    { icon: Info,          color: 'var(--accent-primary)' },
+}
+
+function relTime(d) {
+    if (!d) return ''
+    const date = new Date(d)
+    const diff = (Date.now() - date.getTime()) / 1000
+    if (diff < 60) return 'just now'
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`
+    if (diff < 86400) return `${Math.round(diff / 3600)}h ago`
+    return `${Math.round(diff / 86400)}d ago`
+}
 
 const initials = (name = '') =>
     name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('') || '?'
@@ -21,8 +31,16 @@ const Header = () => {
     const { user, refresh } = useAuth()
     const [showNotif, setShowNotif] = useState(false)
     const [showMenu, setShowMenu] = useState(false)
+    const [notifs, setNotifs] = useState([])
+    const [unread, setUnread] = useState(0)
     const notifRef = useRef(null)
     const menuRef = useRef(null)
+
+    const loadNotifs = () => {
+        listNotifications()
+            .then(r => { setNotifs(r.notifications || []); setUnread(r.unreadCount || 0) })
+            .catch(() => {})
+    }
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -32,6 +50,17 @@ const Header = () => {
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
+
+    useEffect(() => {
+        loadNotifs()
+        const id = setInterval(loadNotifs, 60000)
+        return () => clearInterval(id)
+    }, [])
+
+    const handleMarkAllRead = async () => {
+        await markNotificationsRead().catch(() => {})
+        loadNotifs()
+    }
 
     const handleLogout = async () => {
         try { await logout() } finally { await refresh(); window.location.href = '/' }
@@ -57,34 +86,48 @@ const Header = () => {
                 <div style={{ position: 'relative' }} ref={notifRef}>
                     <button onClick={() => setShowNotif(!showNotif)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', position: 'relative', cursor: 'pointer', padding: '0.25rem' }}>
                         <Bell size={20} />
-                        <div style={{ position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px', background: 'var(--accent-primary)', borderRadius: '50%' }}></div>
+                        {unread > 0 && (
+                            <div style={{
+                                position: 'absolute', top: '-4px', right: '-4px',
+                                minWidth: '16px', height: '16px', padding: '0 4px',
+                                background: '#EF4444', color: 'white', borderRadius: '8px',
+                                fontSize: '0.65rem', fontWeight: 700, display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}>{unread > 99 ? '99+' : unread}</div>
+                        )}
                     </button>
 
                     {showNotif && (
-                        <div className="card" style={{ position: 'absolute', top: '100%', right: 0, width: '320px', padding: 0, overflow: 'hidden', zIndex: 50, border: '1px solid var(--border-color)', marginTop: '0.5rem', background: 'var(--bg-secondary)' }}>
-                            <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                        <div className="card" style={{ position: 'absolute', top: '100%', right: 0, width: '360px', padding: 0, overflow: 'hidden', zIndex: 50, border: '1px solid var(--border-color)', marginTop: '0.5rem', background: 'var(--bg-secondary)', maxHeight: '480px', display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <h3 style={{ margin: 0, fontSize: '0.875rem' }}>Notifications</h3>
+                                {unread > 0 && (
+                                    <button onClick={handleMarkAllRead} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
+                                        Mark all read
+                                    </button>
+                                )}
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                {notifications.map(n => {
-                                    const Icon = n.icon
+                            <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                                {notifs.length === 0 && (
+                                    <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>No notifications yet.</div>
+                                )}
+                                {notifs.map(n => {
+                                    const meta = TYPE_META[n.type] || TYPE_META.info
+                                    const Icon = meta.icon
                                     return (
-                                        <div key={n.id} style={{ display: 'flex', gap: '1rem', padding: '1rem', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: `${n.color}15`, color: n.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <div key={n.id} style={{ display: 'flex', gap: '1rem', padding: '0.875rem 1rem', borderBottom: '1px solid var(--border-color)', background: n.readAt ? 'transparent' : 'rgba(56, 189, 248, 0.04)', transition: 'background 0.2s' }}>
+                                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: `${meta.color}15`, color: meta.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                                 <Icon size={16} />
                                             </div>
-                                            <div>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
                                                 <p style={{ margin: '0 0 0.25rem', fontSize: '0.875rem', fontWeight: 600 }}>{n.title}</p>
-                                                <p style={{ margin: '0 0 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.desc}</p>
-                                                <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>{n.time}</span>
+                                                <p style={{ margin: '0 0 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.message}</p>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>{relTime(n.createdAt)}</span>
                                             </div>
                                         </div>
                                     )
                                 })}
                             </div>
-                            <button style={{ width: '100%', padding: '0.75rem', border: 'none', background: 'transparent', color: 'var(--accent-primary)', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
-                                View all alerts
-                            </button>
                         </div>
                     )}
                 </div>

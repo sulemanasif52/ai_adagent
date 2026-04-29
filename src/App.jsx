@@ -11,6 +11,7 @@ import Analytics from './pages/Analytics'
 import CRM from './pages/CRM'
 import Billing from './pages/Billing'
 import AdClick from './pages/AdClick'
+import Trends from './pages/Trends'
 
 import { AuthProvider, useAuth } from './lib/auth-context'
 
@@ -62,6 +63,7 @@ function App() {
                 <Route path="/create-ad" element={<RequireAuth><DashboardLayout><CreateAd /></DashboardLayout></RequireAuth>} />
                 <Route path="/analytics" element={<RequireAuth><DashboardLayout><Analytics /></DashboardLayout></RequireAuth>} />
                 <Route path="/crm" element={<RequireAuth><DashboardLayout><CRM /></DashboardLayout></RequireAuth>} />
+                <Route path="/trends" element={<RequireAuth><DashboardLayout><Trends /></DashboardLayout></RequireAuth>} />
                 <Route path="/billing" element={<RequireAuth><DashboardLayout><Billing /></DashboardLayout></RequireAuth>} />
 
                 <Route path="*" element={<Navigate to="/" replace />} />

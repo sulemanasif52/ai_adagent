@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { ShoppingBag, Send, CheckCircle, ArrowLeft, Sparkles, Star, Shield, Truck } from 'lucide-react'
+import { captureLead } from '../lib/server'
 
 const mockProducts = {
     'summer-collection': {
@@ -40,30 +41,44 @@ const AdClick = () => {
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [submitted, setSubmitted] = useState(false)
+    const [submitting, setSubmitting] = useState(false)
     const [message, setMessage] = useState('')
+    const [submitError, setSubmitError] = useState('')
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
         if (!name.trim() || !email.trim()) return
-
-        // Save the lead to localStorage (CRM picks this up)
-        const existingLeads = JSON.parse(localStorage.getItem('captured_leads') || '[]')
-        const newLead = {
-            id: Date.now(),
-            name: name.trim(),
-            email: email.trim(),
-            source: product.campaign,
-            product: product.name,
-            audience: product.audience,
-            date: new Date().toLocaleString(),
-            status: 'New',
+        setSubmitting(true)
+        setSubmitError('')
+        try {
+            await captureLead({
+                fullName: name.trim(),
+                email: email.trim(),
+                productId,
+                source: product.campaign,
+                audienceTag: product.audience,
+            })
+            setMessage(`Hey ${name.split(' ')[0]}! 🎉 Thanks for your interest in ${product.name}. We've reserved your spot — check your inbox at ${email} for an exclusive early-access link and a special discount just for you!`)
+            setSubmitted(true)
+        } catch (err) {
+            // Fall back to localStorage if backend is unreachable so the UX
+            // never fully breaks for end-users on the public ad page.
+            try {
+                const existing = JSON.parse(localStorage.getItem('captured_leads') || '[]')
+                existing.unshift({
+                    id: Date.now(), name: name.trim(), email: email.trim(),
+                    source: product.campaign, product: product.name,
+                    audience: product.audience, date: new Date().toLocaleString(), status: 'New',
+                })
+                localStorage.setItem('captured_leads', JSON.stringify(existing))
+                setMessage(`Hey ${name.split(' ')[0]}! 🎉 Thanks for your interest. We've recorded your spot.`)
+                setSubmitted(true)
+            } catch {
+                setSubmitError(err.message || 'Could not submit. Please try again.')
+            }
+        } finally {
+            setSubmitting(false)
         }
-        existingLeads.unshift(newLead)
-        localStorage.setItem('captured_leads', JSON.stringify(existingLeads))
-
-        // Generate personalized message
-        setMessage(`Hey ${name.split(' ')[0]}! 🎉 Thanks for your interest in ${product.name}. We've reserved your spot — check your inbox at ${email} for an exclusive early-access link and a special discount just for you!`)
-        setSubmitted(true)
     }
 
     return (
@@ -288,15 +303,20 @@ const AdClick = () => {
                                     <button
                                         type="submit"
                                         className="btn-primary"
+                                        disabled={submitting}
                                         style={{
                                             width: '100%', padding: '1rem',
                                             fontSize: '1rem', marginTop: '0.5rem',
                                             background: 'linear-gradient(135deg, #10B981, #34D399)',
                                             boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                                            opacity: submitting ? 0.7 : 1,
                                         }}
                                     >
-                                        <Send size={18} style={{ marginRight: '0.5rem' }} /> Claim My Offer
+                                        <Send size={18} style={{ marginRight: '0.5rem' }} /> {submitting ? 'Sending…' : 'Claim My Offer'}
                                     </button>
+                                    {submitError && (
+                                        <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#fca5a5' }}>{submitError}</p>
+                                    )}
                                 </form>
 
                                 <p style={{ margin: '1rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>

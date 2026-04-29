@@ -17,6 +17,18 @@ import meRoutes from './routes/me.js'
 import settingsRoutes from './routes/settings.js'
 import preferencesRoutes from './routes/preferences.js'
 import instagramRoutes from './routes/instagram.js'
+import facebookRoutes from './routes/facebook.js'
+import aiRoutes from './routes/ai.js'
+import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js'
+import campaignRoutes from './routes/campaigns.js'
+import leadRoutes from './routes/leads.js'
+import notificationRoutes from './routes/notifications.js'
+import recommendationRoutes from './routes/recommendations.js'
+import trendRoutes from './routes/trends.js'
+import mlRoutes from './routes/ml.js'
+import videoRoutes from './routes/videos.js'
+import chatRoutes from './routes/chat.js'
+import { startScheduler } from './jobs/scheduler.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.resolve(__dirname, '..', '..', 'dist')
@@ -67,6 +79,18 @@ app.use('/api/me', meRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/preferences', preferencesRoutes)
 app.use('/api/instagram', instagramRoutes)
+app.use('/api/facebook', facebookRoutes)
+app.use('/api/ai', aiRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }))
+app.use('/api/campaigns', campaignRoutes)
+app.use('/api/leads', leadRoutes)
+app.use('/api/notifications', notificationRoutes)
+app.use('/api/recommendations', recommendationRoutes)
+app.use('/api/trends', trendRoutes)
+app.use('/api/ml', mlRoutes)
+app.use('/api/videos', videoRoutes)
+app.use('/api/chat', chatRoutes)
 
 // Production: serve the built React app from dist/, with SPA fallback for non-/api routes.
 if (isProd && fs.existsSync(distDir)) {
@@ -87,4 +111,5 @@ const port = env.PORT
 app.listen(port, '0.0.0.0', () => {
   console.log(`✓ AIMarket server listening on port ${port} (env: ${env.NODE_ENV})`)
   if (isProd) console.log(`  serving frontend from ${distDir}`)
+  if (isProd) startScheduler()
 })

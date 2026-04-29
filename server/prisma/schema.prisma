@@ -15,11 +15,15 @@ model User {
   name      String
   avatarUrl String?
 
-  metaCredential MetaCredential?
-  byokKeys       ByokKey?
-  preferences    Preferences?
-  igPosts        IgPost[]
-  snapshots      AnalyticsSnapshot[]
+  metaCredential  MetaCredential?
+  byokKeys        ByokKey?
+  preferences     Preferences?
+  igPosts         IgPost[]
+  snapshots       AnalyticsSnapshot[]
+  campaigns       Campaign[]
+  leads           Lead[]
+  recommendations Recommendation[]
+  notifications   Notification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -59,6 +63,9 @@ model ByokKey {
   cloudflareAccount String?
   hfToken           String?
   groqKey           String?
+  geminiKey         String?
+  resendKey         String?
+  newsApiKey        String?
   igToken           String?
   igUserId          String?
 
@@ -144,5 +151,123 @@ model IgComment {
 
   fetchedAt DateTime @default(now())
 
+  analysis IgCommentAnalysis?
+
   @@index([postId, timestamp])
+}
+
+// ─── Phase 3: Campaigns, Leads, ML, Notifications, Trends ────────────────────
+
+model Campaign {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  status      String   @default("draft") // draft | active | paused | archived
+  product     String?
+  description String?
+  goals       String? // JSON array
+  platforms   String? // JSON array: ["facebook", "instagram"]
+  dailyBudget Float?
+  lifetimeCap Float?
+  targeting   String? // JSON
+  copy        String? // JSON: { headline, body, cta }
+  imageUrls   String? // JSON array
+  videoUrl    String?
+  estRevenue  Float? // user-entered revenue per conversion
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  metrics         CampaignMetric[]
+  recommendations Recommendation[]
+  leads           Lead[]
+
+  @@index([userId, createdAt])
+}
+
+model CampaignMetric {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  date        DateTime
+  impressions Int      @default(0)
+  reach       Int      @default(0)
+  clicks      Int      @default(0)
+  leads       Int      @default(0)
+  spend       Float    @default(0)
+  revenue     Float    @default(0)
+
+  @@unique([campaignId, date])
+  @@index([campaignId, date])
+}
+
+model Lead {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId  String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  fullName    String
+  email       String
+  phone       String?
+  productId   String?
+  source      String?
+  status      String    @default("new") // new | engaged | converted | lost
+  estValue    Float?
+  audienceTag String?
+  score       Float? // ML lookalike score 0-1
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model IgCommentAnalysis {
+  id         String    @id @default(cuid())
+  commentId  String    @unique
+  comment    IgComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  sentiment  String // positive | neutral | negative | question
+  intent     String? // praise | complaint | question | spam | other
+  confidence Float
+  analyzedAt DateTime  @default(now())
+}
+
+model Recommendation {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId  String?
+  campaign    Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  type        String // anomaly | besttime | hashtag | budget | content | scaleup | forecast
+  severity    String    @default("info") // info | warn | critical
+  title       String
+  message     String
+  data        String? // JSON
+  appliedAt   DateTime?
+  dismissedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // alert | info | success
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Trend {
+  id        String   @id @default(cuid())
+  source    String // ad_library | reddit | google | tiktok | news
+  topic     String
+  payload   String // JSON
+  fetchedAt DateTime @default(now())
+
+  @@index([source, fetchedAt])
 }
