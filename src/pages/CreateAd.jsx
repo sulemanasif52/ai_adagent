@@ -48,6 +48,9 @@ const CreateAd = () => {
     const [analyzeError, setAnalyzeError] = useState('')
     const [generatedImageUrl, setGeneratedImageUrl] = useState('')
     const [genImgLoading, setGenImgLoading] = useState(false)
+    const [genImgError, setGenImgError] = useState('')
+    const [imageLoadFailed, setImageLoadFailed] = useState(false)
+    const [lastImagePrompt, setLastImagePrompt] = useState('')
 
     // Video gen
     const [videoResult, setVideoResult] = useState(null)
@@ -133,17 +136,38 @@ const CreateAd = () => {
             setAnalysis(result)
             // Kick off image generation in the background using the AI's suggested prompt.
             if (result.imagePrompt) {
-                setGenImgLoading(true)
-                aiGenerateImage({ prompt: result.imagePrompt })
-                    .then(r => setGeneratedImageUrl(r.url))
-                    .catch(() => {})
-                    .finally(() => setGenImgLoading(false))
+                setLastImagePrompt(result.imagePrompt)
+                generateAdImage(result.imagePrompt)
             }
         } catch (err) {
             setAnalyzeError(err.message || 'AI analysis failed.')
         } finally {
             setAnalyzing(false)
         }
+    }
+
+    const generateAdImage = async (prompt) => {
+        setGenImgLoading(true)
+        setGenImgError('')
+        setImageLoadFailed(false)
+        try {
+            const r = await aiGenerateImage({ prompt })
+            setGeneratedImageUrl(r.url)
+            if (r.fallback) {
+                // Server couldn't fetch — browser will try directly. If that
+                // also fails, the <img onError> will set imageLoadFailed.
+                setGenImgError('Image services rate-limited — trying directly from your browser.')
+            }
+        } catch (err) {
+            setGenImgError(err.message || 'Image generation failed.')
+            setImageLoadFailed(true)
+        } finally {
+            setGenImgLoading(false)
+        }
+    }
+
+    const retryImage = () => {
+        if (lastImagePrompt) generateAdImage(lastImagePrompt)
     }
 
     const handleGenerateVideo = async () => {
@@ -331,12 +355,28 @@ const CreateAd = () => {
                                     )}
                                     {analysis.copy?.body && <p style={{ margin: '0 0 0.5rem', fontSize: '0.85rem' }}><strong>Body:</strong> {analysis.copy.body}</p>}
                                     {analysis.copy?.cta && <p style={{ margin: 0, fontSize: '0.85rem' }}><strong>CTA:</strong> {analysis.copy.cta}</p>}
-                                    {(genImgLoading || generatedImageUrl) && (
+                                    {(genImgLoading || generatedImageUrl || genImgError) && (
                                         <div style={{ marginTop: '1rem' }}>
                                             <strong style={{ fontSize: '0.85rem' }}>Generated image:</strong>
                                             <div style={{ marginTop: '0.5rem' }}>
                                                 {genImgLoading && <Loader2 size={20} className="spin" />}
-                                                {generatedImageUrl && <img src={generatedImageUrl} alt="" style={{ maxWidth: '300px', borderRadius: 'var(--radius-md)' }} />}
+                                                {generatedImageUrl && !imageLoadFailed && (
+                                                    <img
+                                                        src={generatedImageUrl}
+                                                        alt=""
+                                                        onError={() => setImageLoadFailed(true)}
+                                                        style={{ maxWidth: '300px', borderRadius: 'var(--radius-md)' }}
+                                                    />
+                                                )}
+                                                {imageLoadFailed && (
+                                                    <div style={{ padding: '0.75rem 1rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem' }}>
+                                                        Image services were rate-limited. <button onClick={retryImage} className="btn-secondary" style={{ marginLeft: '0.5rem', padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}>Retry</button>
+                                                        <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Tip: add a HuggingFace or Cloudflare Workers AI key in Settings for instant fallback.</p>
+                                                    </div>
+                                                )}
+                                                {genImgError && !imageLoadFailed && (
+                                                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--accent-warning)' }}>{genImgError}</p>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -617,11 +657,22 @@ const CreateAd = () => {
                                                     : (productDesc || 'Click "Analyze & Generate Ad" on Step 1 to produce AI copy.')}
                                             </p>
 
-                                            <div style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-color)', minHeight: '180px', marginBottom: '1rem', overflow: 'hidden' }}>
-                                                {generatedImageUrl ? (
-                                                    <img src={generatedImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            <div style={{ flex: 1, background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-color)', minHeight: '180px', marginBottom: '1rem', overflow: 'hidden', flexDirection: 'column', gap: '0.5rem', padding: imageLoadFailed ? '1rem' : 0 }}>
+                                                {generatedImageUrl && !imageLoadFailed ? (
+                                                    <img
+                                                        src={generatedImageUrl}
+                                                        alt=""
+                                                        onError={() => setImageLoadFailed(true)}
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    />
                                                 ) : uploadedImages[0]?.url ? (
                                                     <img src={uploadedImages[0].url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : imageLoadFailed ? (
+                                                    <>
+                                                        <ImageIcon size={32} color="var(--text-tertiary)" />
+                                                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>Image gen rate-limited. Tap retry on Step 1.</p>
+                                                        <button onClick={retryImage} className="btn-secondary" style={{ padding: '0.3rem 0.75rem', fontSize: '0.75rem' }}>Retry image</button>
+                                                    </>
                                                 ) : (
                                                     <ImageIcon size={48} color="var(--text-tertiary)" opacity={0.5} />
                                                 )}

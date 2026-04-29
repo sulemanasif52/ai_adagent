@@ -104,30 +104,42 @@ router.post('/generate-copy', requireAuth, asyncRoute(async (req, res) => {
 
 // --- POST /api/ai/generate-image ---
 // body: { prompt, provider?, width?, height? }
-// Always fetches the image bytes server-side (so the browser doesn't depend
-// on a flaky third-party URL), saves to /uploads, returns a local URL.
-// Default provider 'auto' tries Pollinations → Cloudflare → HuggingFace.
+// Strategy:
+//   1. Try server-side fetch through providers in order (Pollinations →
+//      Cloudflare → HuggingFace). If one returns bytes, save to /uploads.
+//   2. If all server-side providers fail, return the Pollinations URL
+//      anyway with `fallback: true`. The browser sometimes succeeds where
+//      our server doesn't (different IP, different rate-limit bucket).
+//   3. Frontend should `onError` -> show retry button if even fallback
+//      load fails in the browser.
 router.post('/generate-image', requireAuth, asyncRoute(async (req, res) => {
   const { prompt, provider = 'auto', width = 1024, height = 1024 } = req.body || {}
   if (!prompt) return res.status(400).json({ error: 'prompt required' })
 
   const keys = await loadKeys(req.user.id)
-  let result
   try {
-    result = await imageLib.generate({ provider, prompt, keys, width, height })
+    const result = await imageLib.generate({ provider, prompt, keys, width, height })
+    const ext = (result.contentType || '').includes('png') ? 'png' : 'jpg'
+    const filename = `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const filepath = path.join(UPLOAD_DIR, filename)
+    fs.writeFileSync(filepath, result.buffer)
+    return res.json({
+      url: `/uploads/${filename}`,
+      provider: result.provider,
+      model: result.model,
+      bytes: result.buffer.length,
+    })
   } catch (err) {
-    return res.status(err.status || 502).json({
-      error: err.message,
-      errors: err.errors,
+    // Fallback: hand the browser a Pollinations URL to try directly.
+    const fallbackUrl = imageLib.pollinationsUrl(prompt, { width, height })
+    console.warn('[ai] generate-image server fetch failed, returning fallback URL:', err.message)
+    return res.json({
+      url: fallbackUrl,
+      provider: 'pollinations-direct',
+      fallback: true,
+      serverError: err.message,
     })
   }
-
-  // All providers now return a buffer. Save it locally and serve via /uploads.
-  const ext = (result.contentType || '').includes('png') ? 'png' : 'jpg'
-  const filename = `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
-  const filepath = path.join(UPLOAD_DIR, filename)
-  fs.writeFileSync(filepath, result.buffer)
-  res.json({ url: `/uploads/${filename}`, provider: result.provider, bytes: result.buffer.length })
 }))
 
 // --- POST /api/ai/analyze ---

@@ -12,54 +12,66 @@ const CF_MODEL = '@cf/black-forest-labs/flux-1-schnell'
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 // Build a Pollinations URL — useful when we want to embed without server fetch.
-export function pollinationsUrl(prompt, { width = 1024, height = 1024, seed } = {}) {
+// `referrer=aimarketpro` is recognized by Pollinations to relax rate limits
+// for known apps (per their docs).
+export function pollinationsUrl(prompt, { width = 1024, height = 1024, seed, model = 'flux' } = {}) {
   const params = new URLSearchParams({
     width: String(width),
     height: String(height),
     nologo: 'true',
     enhance: 'true',
+    nofeed: 'true',
+    referrer: 'aimarketpro',
+    model,
   })
   if (seed) params.set('seed', String(seed))
   return `${POLLINATIONS}/${encodeURIComponent(prompt)}?${params.toString()}`
 }
 
-// Fetch the actual image bytes from Pollinations. Retries on 429/5xx because
-// they aggressively rate-limit anonymous requests. Returns Buffer or throws.
-export async function pollinationsImage({ prompt, width = 1024, height = 1024, seed, maxRetries = 3, model = 'flux' }) {
-  const baseUrl = pollinationsUrl(prompt, { width, height, seed }) + `&model=${model}`
+// Fetch the actual image bytes from Pollinations. Tries multiple models on
+// 429/5xx since each model has its own rate-limit bucket. Returns Buffer or
+// throws.
+export async function pollinationsImage({ prompt, width = 1024, height = 1024, seed }) {
+  // Attempt order: try the most-available models first.
+  const attempts = [
+    { model: 'flux', delay: 0 },
+    { model: 'turbo', delay: 1000 },
+    { model: 'flux-schnell', delay: 2000 },
+    { model: 'flux', delay: 3500 },  // one final retry
+  ]
 
   let lastErr
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    if (attempt > 0) await sleep(1500 * attempt + Math.random() * 1000)
+  for (const { model, delay } of attempts) {
+    if (delay > 0) await sleep(delay + Math.random() * 500)
+    const url = pollinationsUrl(prompt, { width, height, seed, model })
     try {
-      const res = await fetch(baseUrl, {
+      const res = await fetch(url, {
         headers: {
-          'User-Agent': 'AIMarketPro/0.1',
+          'User-Agent': 'AIMarketPro/0.1 (+https://aimarket-pro-production.up.railway.app)',
           Accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
+          Referer: 'https://aimarket-pro-production.up.railway.app/',
         },
       })
       if (res.status === 429 || res.status >= 500) {
-        lastErr = new Error(`Pollinations ${res.status}`)
+        lastErr = new Error(`Pollinations(${model}) ${res.status}`)
         continue
       }
       if (!res.ok) {
         const txt = await res.text().catch(() => '')
-        const err = new Error(`Pollinations ${res.status}: ${txt.slice(0, 200)}`)
-        err.status = res.status
-        throw err
-      }
-      const buf = Buffer.from(await res.arrayBuffer())
-      // Defend against Pollinations returning an HTML error page with 200.
-      if (buf.length < 1000) {
-        lastErr = new Error(`Pollinations returned suspiciously small payload (${buf.length} bytes)`)
+        lastErr = new Error(`Pollinations(${model}) ${res.status}: ${txt.slice(0, 120)}`)
         continue
       }
-      return { buffer: buf, contentType: res.headers.get('content-type') || 'image/jpeg' }
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.length < 1000) {
+        lastErr = new Error(`Pollinations(${model}) tiny payload (${buf.length} bytes)`)
+        continue
+      }
+      return { buffer: buf, contentType: res.headers.get('content-type') || 'image/jpeg', model }
     } catch (err) {
       lastErr = err
     }
   }
-  throw lastErr || new Error('Pollinations failed after retries')
+  throw lastErr || new Error('Pollinations failed after all model attempts')
 }
 
 export async function huggingFaceImage({ apiKey, prompt, model = HF_MODEL, width = 1024, height = 1024 }) {
