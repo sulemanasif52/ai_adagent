@@ -1,13 +1,17 @@
-// Image generation across multiple free providers. Default is Pollinations
-// (URL-only, no API key). Falls back through HuggingFace and Cloudflare
-// Workers AI when keys are present.
+// Image generation across multiple free providers. Server fetches the image
+// bytes itself, so the browser never has to load a flaky third-party URL.
+// Order tried (when caller passes provider='auto'):
+//   1. Pollinations (free, no key) — with retries on 429
+//   2. HuggingFace FLUX (free, slower) — if hfToken set
+//   3. Cloudflare Workers AI FLUX (free 10k/day) — if both CF keys set
 
 const POLLINATIONS = 'https://image.pollinations.ai/prompt'
 const HF_MODEL = 'black-forest-labs/FLUX.1-schnell'
 const CF_MODEL = '@cf/black-forest-labs/flux-1-schnell'
 
-// Pollinations.ai is free + URL-only. Returns a URL the browser can load
-// directly — image is rendered server-side at request time.
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+
+// Build a Pollinations URL — useful when we want to embed without server fetch.
 export function pollinationsUrl(prompt, { width = 1024, height = 1024, seed } = {}) {
   const params = new URLSearchParams({
     width: String(width),
@@ -19,8 +23,45 @@ export function pollinationsUrl(prompt, { width = 1024, height = 1024, seed } = 
   return `${POLLINATIONS}/${encodeURIComponent(prompt)}?${params.toString()}`
 }
 
-// HuggingFace Inference API — returns a binary blob; we save it to disk and
-// return the served URL. Requires hfToken.
+// Fetch the actual image bytes from Pollinations. Retries on 429/5xx because
+// they aggressively rate-limit anonymous requests. Returns Buffer or throws.
+export async function pollinationsImage({ prompt, width = 1024, height = 1024, seed, maxRetries = 3, model = 'flux' }) {
+  const baseUrl = pollinationsUrl(prompt, { width, height, seed }) + `&model=${model}`
+
+  let lastErr
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (attempt > 0) await sleep(1500 * attempt + Math.random() * 1000)
+    try {
+      const res = await fetch(baseUrl, {
+        headers: {
+          'User-Agent': 'AIMarketPro/0.1',
+          Accept: 'image/jpeg,image/png,image/webp,image/*;q=0.8',
+        },
+      })
+      if (res.status === 429 || res.status >= 500) {
+        lastErr = new Error(`Pollinations ${res.status}`)
+        continue
+      }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        const err = new Error(`Pollinations ${res.status}: ${txt.slice(0, 200)}`)
+        err.status = res.status
+        throw err
+      }
+      const buf = Buffer.from(await res.arrayBuffer())
+      // Defend against Pollinations returning an HTML error page with 200.
+      if (buf.length < 1000) {
+        lastErr = new Error(`Pollinations returned suspiciously small payload (${buf.length} bytes)`)
+        continue
+      }
+      return { buffer: buf, contentType: res.headers.get('content-type') || 'image/jpeg' }
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr || new Error('Pollinations failed after retries')
+}
+
 export async function huggingFaceImage({ apiKey, prompt, model = HF_MODEL, width = 1024, height = 1024 }) {
   if (!apiKey) {
     const e = new Error('HuggingFace token not configured.')
@@ -44,10 +85,9 @@ export async function huggingFaceImage({ apiKey, prompt, model = HF_MODEL, width
     e.status = res.status
     throw e
   }
-  return Buffer.from(await res.arrayBuffer())
+  return { buffer: Buffer.from(await res.arrayBuffer()), contentType: 'image/jpeg' }
 }
 
-// Cloudflare Workers AI — returns binary PNG. Requires accountId + token.
 export async function cloudflareImage({ accountId, apiKey, prompt, model = CF_MODEL }) {
   if (!apiKey || !accountId) {
     const e = new Error('Cloudflare account ID + token required.')
@@ -69,35 +109,62 @@ export async function cloudflareImage({ accountId, apiKey, prompt, model = CF_MO
     e.status = res.status
     throw e
   }
-  // CF returns JSON wrapping a base64 image for some models, raw bytes for others.
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('application/json')) {
     const data = await res.json()
     const b64 = data?.result?.image
     if (!b64) throw new Error('Cloudflare returned no image data')
-    return Buffer.from(b64, 'base64')
+    return { buffer: Buffer.from(b64, 'base64'), contentType: 'image/png' }
   }
-  return Buffer.from(await res.arrayBuffer())
+  return { buffer: Buffer.from(await res.arrayBuffer()), contentType: ct || 'image/png' }
 }
 
-// Unified entry point. provider = 'pollinations' | 'huggingface' | 'cloudflare'.
-// For pollinations returns { url, provider } directly (no download).
-// For others returns { buffer, provider } — caller must save to disk.
-export async function generate({ provider = 'pollinations', prompt, keys = {}, width = 1024, height = 1024 }) {
-  if (provider === 'pollinations') {
-    return { url: pollinationsUrl(prompt, { width, height }), provider }
+// Auto mode: try providers in priority order, fall back on failure. Always
+// returns image bytes so the route handler can save them to /uploads and
+// return a local URL the browser can load reliably.
+export async function generate({ provider = 'auto', prompt, keys = {}, width = 1024, height = 1024 }) {
+  if (!prompt || !prompt.trim()) {
+    const e = new Error('image prompt required')
+    e.status = 400
+    throw e
   }
-  if (provider === 'huggingface') {
-    const buffer = await huggingFaceImage({ apiKey: keys.hfToken, prompt, width, height })
-    return { buffer, provider }
+
+  const order = []
+  if (provider === 'auto') {
+    order.push('pollinations')
+    if (keys.cloudflareAccount && keys.cloudflareToken) order.push('cloudflare')
+    if (keys.hfToken) order.push('huggingface')
+  } else {
+    order.push(provider)
   }
-  if (provider === 'cloudflare') {
-    const buffer = await cloudflareImage({
-      accountId: keys.cloudflareAccount,
-      apiKey: keys.cloudflareToken,
-      prompt,
-    })
-    return { buffer, provider }
+
+  const errors = []
+  for (const p of order) {
+    try {
+      if (p === 'pollinations') {
+        const r = await pollinationsImage({ prompt, width, height })
+        return { ...r, provider: p }
+      }
+      if (p === 'huggingface') {
+        const r = await huggingFaceImage({ apiKey: keys.hfToken, prompt, width, height })
+        return { ...r, provider: p }
+      }
+      if (p === 'cloudflare') {
+        const r = await cloudflareImage({
+          accountId: keys.cloudflareAccount,
+          apiKey: keys.cloudflareToken,
+          prompt,
+        })
+        return { ...r, provider: p }
+      }
+    } catch (err) {
+      console.warn(`[image] provider=${p} failed:`, err.message)
+      errors.push({ provider: p, error: err.message })
+    }
   }
-  throw new Error(`Unknown image provider: ${provider}`)
+
+  const e = new Error(`All image providers failed: ${errors.map(x => `${x.provider}=${x.error}`).join('; ')}`)
+  e.status = 502
+  e.errors = errors
+  throw e
 }

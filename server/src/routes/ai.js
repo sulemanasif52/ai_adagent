@@ -104,22 +104,30 @@ router.post('/generate-copy', requireAuth, asyncRoute(async (req, res) => {
 
 // --- POST /api/ai/generate-image ---
 // body: { prompt, provider?, width?, height? }
+// Always fetches the image bytes server-side (so the browser doesn't depend
+// on a flaky third-party URL), saves to /uploads, returns a local URL.
+// Default provider 'auto' tries Pollinations → Cloudflare → HuggingFace.
 router.post('/generate-image', requireAuth, asyncRoute(async (req, res) => {
-  const { prompt, provider = 'pollinations', width = 1024, height = 1024 } = req.body || {}
+  const { prompt, provider = 'auto', width = 1024, height = 1024 } = req.body || {}
   if (!prompt) return res.status(400).json({ error: 'prompt required' })
 
   const keys = await loadKeys(req.user.id)
-  const result = await imageLib.generate({ provider, prompt, keys, width, height })
-
-  if (result.url) {
-    return res.json({ url: result.url, provider: result.provider })
+  let result
+  try {
+    result = await imageLib.generate({ provider, prompt, keys, width, height })
+  } catch (err) {
+    return res.status(err.status || 502).json({
+      error: err.message,
+      errors: err.errors,
+    })
   }
 
-  // Provider returned a buffer — save to /uploads and serve via static route.
-  const filename = `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
+  // All providers now return a buffer. Save it locally and serve via /uploads.
+  const ext = (result.contentType || '').includes('png') ? 'png' : 'jpg'
+  const filename = `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
   const filepath = path.join(UPLOAD_DIR, filename)
   fs.writeFileSync(filepath, result.buffer)
-  res.json({ url: `/uploads/${filename}`, provider: result.provider })
+  res.json({ url: `/uploads/${filename}`, provider: result.provider, bytes: result.buffer.length })
 }))
 
 // --- POST /api/ai/analyze ---

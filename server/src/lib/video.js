@@ -4,12 +4,13 @@
 // If/when ffmpeg becomes available we'll upgrade to compose a real MP4 here.
 
 import path from 'node:path'
+import fs from 'node:fs'
 import { prisma } from '../db.js'
 import { decrypt } from './crypto.js'
 import * as groq from './ai/groq.js'
 import * as gemini from './ai/gemini.js'
 import * as anthropic from './ai/anthropic.js'
-import { pollinationsUrl } from './ai/image.js'
+import { generate as generateImage } from './ai/image.js'
 import { synthesizeToFile, VOICES } from './tts.js'
 
 const UPLOAD_DIR = process.env.NODE_ENV === 'production'
@@ -33,6 +34,9 @@ async function loadKeys(userId) {
     groqKey: row.groqKey ? decrypt(row.groqKey) : null,
     geminiKey: row.geminiKey ? decrypt(row.geminiKey) : null,
     anthropicKey: row.anthropicKey ? decrypt(row.anthropicKey) : null,
+    hfToken: row.hfToken ? decrypt(row.hfToken) : null,
+    cloudflareAccount: row.cloudflareAccount || null,
+    cloudflareToken: row.cloudflareToken ? decrypt(row.cloudflareToken) : null,
   }
 }
 
@@ -64,13 +68,30 @@ export async function generateSlideshowAd({ userId, product, description, durati
     throw e
   }
 
-  // 2. Build image URL per scene (Pollinations is URL-only — no fetch needed).
+  // 2. Generate per-scene images server-side IN PARALLEL — saves to /uploads
+  // and returns local URLs the browser can load reliably (avoids Pollinations
+  // 429 rate-limits hitting the user's browser directly).
+  const sceneImages = await Promise.all(parsed.scenes.slice(0, sceneCount).map(async (s, i) => {
+    const prompt = s.description || product || 'product photo'
+    try {
+      const result = await generateImage({ provider: 'auto', prompt, keys, width: 1080, height: 1080 })
+      const ext = (result.contentType || '').includes('png') ? 'png' : 'jpg'
+      const filename = `scene-${userId}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}.${ext}`
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), result.buffer)
+      return { url: `/uploads/${filename}`, error: null }
+    } catch (err) {
+      console.warn(`[video] scene ${i} image failed:`, err.message)
+      return { url: null, error: err.message }
+    }
+  }))
+
   const scenes = parsed.scenes.slice(0, sceneCount).map((s, i) => ({
     index: i,
     description: s.description || '',
     voiceoverLine: s.voiceoverLine || '',
     durationSec: perScene,
-    imageUrl: pollinationsUrl(s.description || product || 'product photo', { width: 1080, height: 1080, seed: 1000 + i }),
+    imageUrl: sceneImages[i]?.url || null,
+    imageError: sceneImages[i]?.error || null,
   }))
 
   // 3. Generate voiceover MP3 from concatenated script.
