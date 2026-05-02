@@ -21,20 +21,24 @@ function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 }
 
-async function cached(source, topic, fetcher) {
+async function cached(source, topic, fetcher, { skip = false } = {}) {
   const ttl = CACHE_TTL_MS[source] || 60 * 60 * 1000
   const cutoff = new Date(Date.now() - ttl)
-  const hit = await prisma.trend.findFirst({
-    where: { source, topic, fetchedAt: { gte: cutoff } },
-    orderBy: { fetchedAt: 'desc' },
-  })
-  if (hit) {
-    try { return { fromCache: true, data: JSON.parse(hit.payload), fetchedAt: hit.fetchedAt } } catch {}
+  if (!skip) {
+    const hit = await prisma.trend.findFirst({
+      where: { source, topic, fetchedAt: { gte: cutoff } },
+      orderBy: { fetchedAt: 'desc' },
+    })
+    if (hit) {
+      try { return { fromCache: true, data: JSON.parse(hit.payload), fetchedAt: hit.fetchedAt } } catch {}
+    }
   }
   const fresh = await fetcher()
   await prisma.trend.create({ data: { source, topic, payload: JSON.stringify(fresh) } })
   return { fromCache: false, data: fresh, fetchedAt: new Date() }
 }
+
+const isFresh = (req) => req.query.fresh === '1' || req.query.refresh === '1'
 
 // --- GET /api/trends/ad-library?keyword=&country=US ---
 // Uses APP_ID|APP_SECRET as access token (Meta's "app access token" — works
@@ -59,7 +63,7 @@ router.get('/ad-library', requireAuth, asyncRoute(async (req, res) => {
       return { ads: [], error: d?.error?.message || `status ${r.status}` }
     }
     return { ads: d.data || [] }
-  })
+  }, { skip: isFresh(req) })
   res.json(result)
 }))
 
@@ -88,7 +92,7 @@ router.get('/reddit', requireAuth, asyncRoute(async (req, res) => {
         createdAt: c.data.created_utc * 1000,
       })),
     }
-  })
+  }, { skip: isFresh(req) })
   res.json(result)
 }))
 
@@ -124,7 +128,7 @@ router.get('/news', requireAuth, asyncRoute(async (req, res) => {
         image: a.urlToImage,
       })),
     }
-  })
+  }, { skip: isFresh(req) })
   res.json(result)
 }))
 
@@ -151,7 +155,7 @@ router.get('/hackernews', requireAuth, asyncRoute(async (req, res) => {
         time: s.time * 1000,
       })),
     }
-  })
+  }, { skip: isFresh(req) })
   res.json(result)
 }))
 

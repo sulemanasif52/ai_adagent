@@ -5,7 +5,7 @@ import StatCard from '../components/StatCard'
 import {
     getIgAccount, getIgInsights, getIgPosts, getIgPostComments, syncInstagram,
     getFbPage, getFbPageInsights, getFbPagePosts,
-    listRecommendations, mlAudienceClusters, mlRunAll,
+    listRecommendations, mlAudienceClusters, mlRunAll, mlSentiment,
 } from '../lib/server'
 
 const fmt = n => (n == null ? '—' : Number(n).toLocaleString())
@@ -21,10 +21,10 @@ function sumSeries(series) {
 }
 
 const TABS = [
-    { id: 'overview', label: 'Overview', icon: BarChart3 },
+    { id: 'overview', label: 'Instagram', icon: Instagram },
     { id: 'fb',       label: 'Facebook Page', icon: Facebook },
-    { id: 'comments', label: 'Comments', icon: MessageCircle },
-    { id: 'audience', label: 'Audience', icon: Users },
+    { id: 'comments', label: 'Comments + Sentiment', icon: MessageCircle },
+    { id: 'audience', label: 'Audience Clusters', icon: Users },
     { id: 'besttime', label: 'Best Times', icon: Clock },
 ]
 
@@ -330,11 +330,59 @@ function FacebookTab({ days }) {
 // ─── Comments Tab ─────────────────────────────────────────────────────────────
 
 function CommentsTab({ posts }) {
-    const [data, setData] = useState({})  // postId → comments
+    const [data, setData] = useState({})  // postId → comments | { error }
     const [loadingId, setLoadingId] = useState(null)
+    const [autoLoading, setAutoLoading] = useState(true)
+    const [classifying, setClassifying] = useState(false)
+    const [classifyMsg, setClassifyMsg] = useState('')
+
+    // Pre-load comments for ALL visible posts on mount.
+    useEffect(() => {
+        let cancelled = false
+        const targets = posts.filter(p => p.commentsCount > 0).slice(0, 10)
+        if (!targets.length) {
+            setAutoLoading(false)
+            return
+        }
+        ;(async () => {
+            for (const p of targets) {
+                if (cancelled) break
+                try {
+                    const r = await getIgPostComments(p.id, true)
+                    if (cancelled) break
+                    setData(prev => ({ ...prev, [p.id]: r.comments || [] }))
+                } catch (err) {
+                    if (cancelled) break
+                    setData(prev => ({ ...prev, [p.id]: { error: err.message } }))
+                }
+            }
+            if (!cancelled) setAutoLoading(false)
+        })()
+        return () => { cancelled = true }
+    }, [posts])
+
+    const runClassify = async () => {
+        setClassifying(true)
+        setClassifyMsg('')
+        try {
+            const r = await mlSentiment()
+            setClassifyMsg(`Classified ${r.classified || 0} comments`)
+            // Refetch comments so the analysis shows up.
+            const targets = posts.filter(p => p.commentsCount > 0).slice(0, 10)
+            for (const p of targets) {
+                try {
+                    const r2 = await getIgPostComments(p.id, true)
+                    setData(prev => ({ ...prev, [p.id]: r2.comments || [] }))
+                } catch {}
+            }
+        } catch (err) {
+            setClassifyMsg(`Classification failed: ${err.message}`)
+        } finally {
+            setClassifying(false)
+        }
+    }
 
     const loadComments = async (postId) => {
-        if (data[postId]) return
         setLoadingId(postId)
         try {
             const r = await getIgPostComments(postId, true)
@@ -365,9 +413,15 @@ function CommentsTab({ posts }) {
 
     return (
         <div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: 0 }}>
-                Click a post to load + classify its comments. Sentiment is auto-classified by Groq (also runs hourly via cron).
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', margin: 0 }}>
+                    {autoLoading ? 'Loading comments…' : 'Comments auto-classified by Groq + hourly cron.'}
+                </p>
+                <button onClick={runClassify} disabled={classifying} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}>
+                    {classifying ? <Loader2 size={14} className="spin" /> : <Smile size={14} />} {classifying ? 'Classifying…' : 'Re-run sentiment'}
+                </button>
+            </div>
+            {classifyMsg && <p style={{ margin: '0 0 1rem', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{classifyMsg}</p>}
 
             {pieData.length > 0 && (
                 <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>

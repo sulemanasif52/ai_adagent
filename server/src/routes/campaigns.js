@@ -152,6 +152,171 @@ router.delete('/:id', requireAuth, asyncRoute(async (req, res) => {
   res.json({ ok: true, archived: owner.id })
 }))
 
+// ─── Per-post (creative) endpoints ────────────────────────────────────────────
+// A Campaign now holds many CampaignPost rows — each is one ad creative that
+// can be published independently. Lets users build out collections like
+// "Winter Sale 2026" with multiple distinct posts.
+
+// --- GET /api/campaigns/:id/posts ---
+router.get('/:id/posts', requireAuth, asyncRoute(async (req, res) => {
+  const c = await prisma.campaign.findFirst({
+    where: { id: req.params.id, userId: req.user.id },
+    select: { id: true },
+  })
+  if (!c) return res.status(404).json({ error: 'not_found' })
+  const posts = await prisma.campaignPost.findMany({
+    where: { campaignId: c.id },
+    orderBy: { createdAt: 'desc' },
+  })
+  res.json({
+    posts: posts.map(p => ({
+      ...p,
+      publishedPlatforms: p.publishedPlatforms ? safeJson(p.publishedPlatforms) : [],
+    })),
+  })
+}))
+
+// --- POST /api/campaigns/:id/posts ---
+// body: { imageUrl?, videoUrl?, headline?, body?, cta?, caption? }
+router.post('/:id/posts', requireAuth, asyncRoute(async (req, res) => {
+  const c = await prisma.campaign.findFirst({
+    where: { id: req.params.id, userId: req.user.id },
+    select: { id: true },
+  })
+  if (!c) return res.status(404).json({ error: 'not_found' })
+
+  const b = req.body || {}
+  const composed = b.caption || [b.headline, b.body, b.cta].filter(Boolean).join('\n\n') || null
+
+  const post = await prisma.campaignPost.create({
+    data: {
+      campaignId: c.id,
+      imageUrl: b.imageUrl ?? null,
+      videoUrl: b.videoUrl ?? null,
+      headline: b.headline ?? null,
+      body: b.body ?? null,
+      cta: b.cta ?? null,
+      caption: composed,
+    },
+  })
+  res.status(201).json({ post })
+}))
+
+// --- PUT /api/campaigns/posts/:postId ---
+router.put('/posts/:postId', requireAuth, asyncRoute(async (req, res) => {
+  const post = await prisma.campaignPost.findFirst({
+    where: { id: req.params.postId, campaign: { userId: req.user.id } },
+    select: { id: true },
+  })
+  if (!post) return res.status(404).json({ error: 'not_found' })
+
+  const b = req.body || {}
+  const data = {}
+  if (b.imageUrl !== undefined) data.imageUrl = b.imageUrl
+  if (b.videoUrl !== undefined) data.videoUrl = b.videoUrl
+  if (b.headline !== undefined) data.headline = b.headline
+  if (b.body !== undefined) data.body = b.body
+  if (b.cta !== undefined) data.cta = b.cta
+  if (b.caption !== undefined) data.caption = b.caption
+  if (b.status !== undefined) data.status = b.status
+
+  const updated = await prisma.campaignPost.update({ where: { id: post.id }, data })
+  res.json({ post: updated })
+}))
+
+// --- DELETE /api/campaigns/posts/:postId ---
+router.delete('/posts/:postId', requireAuth, asyncRoute(async (req, res) => {
+  const post = await prisma.campaignPost.findFirst({
+    where: { id: req.params.postId, campaign: { userId: req.user.id } },
+    select: { id: true },
+  })
+  if (!post) return res.status(404).json({ error: 'not_found' })
+  await prisma.campaignPost.delete({ where: { id: post.id } })
+  res.json({ ok: true })
+}))
+
+// --- POST /api/campaigns/posts/:postId/publish ---
+// body: { platforms: ['instagram','facebook'] }
+router.post('/posts/:postId/publish', requireAuth, asyncRoute(async (req, res) => {
+  const post = await prisma.campaignPost.findFirst({
+    where: { id: req.params.postId, campaign: { userId: req.user.id } },
+    include: { campaign: true },
+  })
+  if (!post) return res.status(404).json({ error: 'not_found' })
+
+  const cred = await prisma.metaCredential.findUnique({ where: { userId: req.user.id } })
+  if (!cred?.pageAccessToken) {
+    return res.status(412).json({ error: 'No Page Access Token. Reconnect Facebook with publishing permissions.' })
+  }
+  const pageToken = decrypt(cred.pageAccessToken)
+
+  let imageUrl = post.imageUrl
+  if (imageUrl && imageUrl.startsWith('/')) {
+    const base = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`
+    imageUrl = base.replace(/\/$/, '') + imageUrl
+  }
+  const caption = post.caption
+    || [post.headline, post.body, post.cta].filter(Boolean).join('\n\n')
+    || post.campaign.name
+
+  const platforms = req.body?.platforms || ['facebook', 'instagram']
+  const results = []
+  let igMediaId = null
+  let fbPostId = null
+
+  for (const platform of platforms) {
+    if (platform === 'instagram') {
+      if (!cred.igBusinessAccountId) {
+        results.push({ platform, ok: false, error: 'Instagram Business account not linked.' })
+        continue
+      }
+      if (!imageUrl) {
+        results.push({ platform, ok: false, error: 'Instagram requires an image.' })
+        continue
+      }
+      try {
+        const r = await publishImageToInstagram(cred.igBusinessAccountId, pageToken, { imageUrl, caption })
+        igMediaId = r.mediaId
+        results.push({ platform, ok: true, mediaId: r.mediaId })
+      } catch (err) {
+        results.push({ platform, ok: false, error: err.message })
+      }
+    } else if (platform === 'facebook') {
+      if (!cred.pageId) {
+        results.push({ platform, ok: false, error: 'Facebook Page not linked.' })
+        continue
+      }
+      try {
+        const r = await publishPagePost(cred.pageId, pageToken, { message: caption, imageUrl })
+        fbPostId = r.id
+        results.push({ platform, ok: true, postId: r.id })
+      } catch (err) {
+        results.push({ platform, ok: false, error: err.message })
+      }
+    }
+  }
+
+  // Persist publishing state on the post.
+  const successPlatforms = results.filter(r => r.ok).map(r => r.platform)
+  await prisma.campaignPost.update({
+    where: { id: post.id },
+    data: {
+      status: successPlatforms.length ? 'published' : 'draft',
+      publishedAt: successPlatforms.length ? new Date() : null,
+      publishedPlatforms: successPlatforms.length ? JSON.stringify(successPlatforms) : null,
+      igMediaId: igMediaId || post.igMediaId,
+      fbPostId: fbPostId || post.fbPostId,
+      publishError: results.filter(r => !r.ok).map(r => `${r.platform}: ${r.error}`).join('; ') || null,
+    },
+  })
+
+  if (successPlatforms.length) {
+    await prisma.campaign.update({ where: { id: post.campaignId }, data: { status: 'active' } })
+  }
+
+  res.json({ ok: results.every(r => r.ok), results })
+}))
+
 // --- POST /api/campaigns/:id/publish ---
 // Posts the campaign's first generated image + headline/body to each platform
 // listed in campaign.platforms (currently supports facebook + instagram).

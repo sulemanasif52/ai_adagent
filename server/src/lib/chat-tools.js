@@ -4,6 +4,7 @@
 import { prisma } from './../db.js'
 import { decrypt } from './crypto.js'
 import { getAccountInsights, getAccountProfile } from './instagram.js'
+import { getPageProfile, getPageInsights } from './facebook.js'
 
 export const TOOL_DEFS = [
   {
@@ -117,6 +118,30 @@ export const TOOL_DEFS = [
     function: {
       name: 'get_sentiment_summary',
       description: 'Returns counts of comment sentiment (positive/neutral/negative/question) across the user\'s posts.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_facebook_page_summary',
+      description: 'Returns the user\'s Facebook Page summary: name, fan count, follower count, recent reach + engagement.',
+      parameters: { type: 'object', properties: { range_days: { type: 'integer', minimum: 1, maximum: 90 } }, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_recent_posts',
+      description: 'Lists this campaign\'s most recent posts (CampaignPost records) — what\'s been generated and published.',
+      parameters: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 30 } }, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_active_recommendations',
+      description: 'Returns active (not-yet-applied or dismissed) ML recommendations across all types.',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -338,6 +363,69 @@ const HANDLERS = {
       out.total += r._count._all
     }
     return out
+  },
+
+  async get_facebook_page_summary({ range_days = 7 }, userId) {
+    const cred = await prisma.metaCredential.findUnique({ where: { userId } })
+    if (!cred?.pageId || !cred.pageAccessToken) return { error: 'Facebook Page not connected.' }
+    try {
+      const pageToken = decrypt(cred.pageAccessToken)
+      const profile = await getPageProfile(cred.pageId, pageToken)
+      const days = Math.min(Math.max(Number(range_days) || 7, 1), 90)
+      const until = Math.floor(Date.now() / 1000)
+      const since = until - days * 86400
+      const ins = await getPageInsights(cred.pageId, pageToken, { since, until }).catch(() => ({ data: [] }))
+      const totals = {}
+      for (const m of (ins.data || [])) {
+        if (Array.isArray(m.values) && m.values.length) {
+          totals[m.name] = m.values.reduce((a, v) => a + (typeof v.value === 'object' ? Object.values(v.value).reduce((x, y) => x + y, 0) : (v.value || 0)), 0)
+        } else if (m.total_value) {
+          totals[m.name] = m.total_value.value
+        }
+      }
+      return {
+        name: profile.name,
+        fans: profile.fan_count,
+        followers: profile.followers_count,
+        category: profile.category,
+        rangeDays: days,
+        totals,
+      }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
+  async list_recent_posts({ limit = 10 }, userId) {
+    const rows = await prisma.campaignPost.findMany({
+      where: { campaign: { userId } },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Number(limit) || 10, 30),
+      include: { campaign: { select: { name: true } } },
+    })
+    return {
+      posts: rows.map(p => ({
+        id: p.id,
+        campaign: p.campaign?.name,
+        headline: p.headline,
+        status: p.status,
+        publishedAt: p.publishedAt,
+        platforms: p.publishedPlatforms ? JSON.parse(p.publishedPlatforms) : [],
+      })),
+    }
+  },
+
+  async get_active_recommendations(_args, userId) {
+    const rows = await prisma.recommendation.findMany({
+      where: { userId, appliedAt: null, dismissedAt: null },
+      orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
+      take: 20,
+    })
+    return {
+      recommendations: rows.map(r => ({
+        type: r.type, severity: r.severity, title: r.title, message: r.message,
+      })),
+    }
   },
 }
 

@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Settings from './components/Settings'
+import Chatbot from './components/Chatbot'
 
 import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
@@ -49,6 +50,7 @@ function DashboardLayout({ children }) {
                 </main>
             </div>
             <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            <Chatbot mode="floating" />
         </div>
     )
 }

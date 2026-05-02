@@ -89,6 +89,13 @@ export const deleteCampaign     = (id) => req(`/campaigns/${id}`, { method: 'DEL
 export const addCampaignMetric  = (id, body) => req(`/campaigns/${id}/metrics`, { method: 'POST', body })
 export const publishCampaign    = (id, body) => req(`/campaigns/${id}/publish`, { method: 'POST', body })
 
+// --- Per-post (creative) endpoints ---
+export const listCampaignPosts  = (id) => req(`/campaigns/${id}/posts`)
+export const createCampaignPost = (id, body) => req(`/campaigns/${id}/posts`, { method: 'POST', body })
+export const updateCampaignPost = (postId, body) => req(`/campaigns/posts/${postId}`, { method: 'PUT', body })
+export const deleteCampaignPost = (postId) => req(`/campaigns/posts/${postId}`, { method: 'DELETE' })
+export const publishCampaignPost = (postId, body) => req(`/campaigns/posts/${postId}/publish`, { method: 'POST', body })
+
 // --- Direct platform publishing ---
 export const publishToInstagram = (body) => req('/instagram/publish', { method: 'POST', body })
 export const publishToFbPage    = (body) => req('/facebook/page/publish', { method: 'POST', body })
@@ -108,11 +115,11 @@ export const deleteNotification = (id) => req(`/notifications/${id}`, { method: 
 export const listRecommendations  = (params) => req('/recommendations' + qs(params))
 export const updateRecommendation = (id, body) => req(`/recommendations/${id}`, { method: 'PUT', body })
 
-// --- Trends ---
-export const trendsAdLibrary  = (keyword, country = 'US') => req(`/trends/ad-library?keyword=${encodeURIComponent(keyword)}&country=${country}`)
-export const trendsReddit     = (subreddit = 'marketing', limit = 10, time = 'day') => req(`/trends/reddit?subreddit=${encodeURIComponent(subreddit)}&limit=${limit}&time=${time}`)
-export const trendsNews       = (topic, limit = 10) => req(`/trends/news?topic=${encodeURIComponent(topic)}&limit=${limit}`)
-export const trendsHN         = (limit = 10) => req(`/trends/hackernews?limit=${limit}`)
+// --- Trends --- (pass fresh=true to bypass server-side cache)
+export const trendsAdLibrary  = (keyword, country = 'US', fresh = false) => req(`/trends/ad-library?keyword=${encodeURIComponent(keyword)}&country=${country}${fresh ? '&fresh=1' : ''}`)
+export const trendsReddit     = (subreddit = 'marketing', limit = 10, time = 'day', fresh = false) => req(`/trends/reddit?subreddit=${encodeURIComponent(subreddit)}&limit=${limit}&time=${time}${fresh ? '&fresh=1' : ''}`)
+export const trendsNews       = (topic, limit = 10, fresh = false) => req(`/trends/news?topic=${encodeURIComponent(topic)}&limit=${limit}${fresh ? '&fresh=1' : ''}`)
+export const trendsHN         = (limit = 10, fresh = false) => req(`/trends/hackernews?limit=${limit}${fresh ? '&fresh=1' : ''}`)
 export const trendsSynthesize = (industry, signals) => req('/trends/synthesize', { method: 'POST', body: { industry, signals } })
 
 // --- ML ---

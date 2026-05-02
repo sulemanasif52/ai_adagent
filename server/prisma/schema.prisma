@@ -182,8 +182,48 @@ model Campaign {
   metrics         CampaignMetric[]
   recommendations Recommendation[]
   leads           Lead[]
+  posts           CampaignPost[]
 
   @@index([userId, createdAt])
+}
+
+// A single ad creative (one image + caption) within a campaign. A campaign
+// like "Winter Sale 2026" can have many CampaignPost rows — each is a
+// distinct post that can be published independently to IG/FB.
+model CampaignPost {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // Creative
+  imageUrl   String?
+  videoUrl   String?
+  headline   String?
+  body       String?
+  cta        String?
+  caption    String? // composed caption (headline+body+cta) ready for posting
+
+  // Publishing state
+  status              String  @default("draft") // draft | published | archived
+  publishedAt         DateTime?
+  publishedPlatforms  String? // JSON array
+  igMediaId           String?
+  fbPostId            String?
+  publishError        String?
+
+  // Per-post analytics (populated post-publishing)
+  reach        Int @default(0)
+  impressions  Int @default(0)
+  likes        Int @default(0)
+  comments     Int @default(0)
+  shares       Int @default(0)
+  clicks       Int @default(0)
+  insightsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId, createdAt])
 }
 
 model CampaignMetric {

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, ChevronLeft, ChevronRight, UploadCloud, Globe, MapPin, Search, Facebook, Instagram, Youtube, Twitter, Linkedin, MonitorPlay, Sparkles, Download, Loader2, PartyPopper, Wand2, Settings2, Image as ImageIcon, Copy, MessageSquare, Film, Zap } from 'lucide-react'
-import Chatbot from '../components/Chatbot'
 import { uploadFile, aiAnalyze, aiGenerateImage, createCampaign, generateVideoAd, mlPredictRoi } from '../lib/server'
 
 const platformsList = [
@@ -812,9 +811,8 @@ const CreateAd = () => {
                 )}
             </div>
 
-            {/* Floating AI Chatbot Assistant triggered by interaction */}
-            <Chatbot mode="floating" isOpenTrigger={showChatbot} />
-            
+            {/* Chatbot now lives in DashboardLayout — floats on every page */}
+
             <style>{`
                 .fade-in { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); } 
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Loader2, Instagram, Facebook, Send, ExternalLink, Trash2, AlertTriangle, CheckCircle, Image as ImageIcon, DollarSign, MousePointerClick, Users, TrendingUp } from 'lucide-react'
-import { getCampaign, publishCampaign, deleteCampaign } from '../lib/server'
+import { ArrowLeft, Loader2, Instagram, Facebook, Send, ExternalLink, Trash2, AlertTriangle, CheckCircle, Image as ImageIcon, DollarSign, MousePointerClick, Users, TrendingUp, Plus, Sparkles } from 'lucide-react'
+import { getCampaign, publishCampaign, deleteCampaign, listCampaignPosts, createCampaignPost, deleteCampaignPost, publishCampaignPost, aiAnalyze, aiGenerateImage } from '../lib/server'
 
 const fmtMoney = (n) => n == null ? '—' : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
 const fmtPct = (n) => n == null ? '—' : `${(n * 100).toFixed(0)}%`
@@ -23,6 +23,13 @@ export default function CampaignDetail() {
     const [publishResults, setPublishResults] = useState(null)
     const [selectedPlatforms, setSelectedPlatforms] = useState({ instagram: true, facebook: true })
 
+    // Posts (multiple ad creatives per campaign)
+    const [posts, setPosts] = useState([])
+    const [postsLoading, setPostsLoading] = useState(true)
+    const [creating, setCreating] = useState(false)
+    const [showCreator, setShowCreator] = useState(false)
+    const [newPostDescription, setNewPostDescription] = useState('')
+
     const load = () => {
         setLoading(true)
         getCampaign(id)
@@ -38,7 +45,54 @@ export default function CampaignDetail() {
             .finally(() => setLoading(false))
     }
 
-    useEffect(() => { load() }, [id])  // eslint-disable-line react-hooks/exhaustive-deps
+    const loadPosts = () => {
+        setPostsLoading(true)
+        listCampaignPosts(id)
+            .then(r => setPosts(r.posts || []))
+            .catch(() => {})
+            .finally(() => setPostsLoading(false))
+    }
+
+    useEffect(() => { load(); loadPosts() }, [id])  // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleCreatePost = async () => {
+        if (!newPostDescription.trim()) return
+        setCreating(true)
+        try {
+            // Use AI to generate copy + image, then save as a CampaignPost.
+            const analysis = await aiAnalyze({ description: newPostDescription, productName: data?.campaign?.product || data?.campaign?.name })
+            const imgPromise = analysis.imagePrompt ? aiGenerateImage({ prompt: analysis.imagePrompt }) : Promise.resolve(null)
+            const img = await imgPromise.catch(() => null)
+            await createCampaignPost(id, {
+                imageUrl: img?.url || null,
+                headline: analysis.copy?.headlines?.[0] || null,
+                body: analysis.copy?.body || null,
+                cta: analysis.copy?.cta || null,
+            })
+            setNewPostDescription('')
+            setShowCreator(false)
+            loadPosts()
+        } catch (err) {
+            alert('Failed to generate post: ' + err.message)
+        } finally {
+            setCreating(false)
+        }
+    }
+
+    const handleDeletePost = async (postId) => {
+        if (!confirm('Delete this ad?')) return
+        await deleteCampaignPost(postId).catch(() => {})
+        loadPosts()
+    }
+
+    const handlePublishPost = async (postId, platforms) => {
+        try {
+            await publishCampaignPost(postId, { platforms })
+            loadPosts()
+        } catch (err) {
+            alert('Publish failed: ' + err.message)
+        }
+    }
 
     const handlePublish = async () => {
         const platforms = Object.entries(selectedPlatforms).filter(([_, v]) => v).map(([k]) => k)
@@ -251,7 +305,109 @@ export default function CampaignDetail() {
                     </div>
                 </div>
             </div>
+            {/* Posts within this campaign — multiple ad creatives can live here */}
+            <div className="card" style={{ padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Sparkles size={16} color="var(--accent-primary)" /> Ads in this campaign
+                        </h3>
+                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {posts.length === 0 ? 'No ads yet — generate your first one below.' : `${posts.length} ${posts.length === 1 ? 'ad' : 'ads'} · ${posts.filter(p => p.status === 'published').length} published`}
+                        </p>
+                    </div>
+                    <button onClick={() => setShowCreator(s => !s)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem' }}>
+                        <Plus size={14} /> {showCreator ? 'Cancel' : 'Generate new ad'}
+                    </button>
+                </div>
+
+                {showCreator && (
+                    <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', fontWeight: 500 }}>What's this ad about?</label>
+                        <textarea
+                            value={newPostDescription}
+                            onChange={e => setNewPostDescription(e.target.value)}
+                            placeholder="e.g. New summer collection arrival - lightweight cotton dresses, $40 off this week"
+                            rows={3}
+                            className="input-base"
+                            style={{ background: 'var(--bg-primary)', resize: 'vertical' }}
+                        />
+                        <button
+                            onClick={handleCreatePost}
+                            disabled={creating || !newPostDescription.trim()}
+                            className="btn-primary"
+                            style={{ marginTop: '0.6rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(90deg, #38BDF8, #A78BFA)', opacity: creating ? 0.7 : 1 }}
+                        >
+                            {creating ? <><Loader2 size={14} className="spin" /> Generating ad…</> : <><Sparkles size={14} /> Generate with AI</>}
+                        </button>
+                        <p style={{ margin: '0.5rem 0 0', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>~10–20 seconds — AI writes copy + generates image</p>
+                    </div>
+                )}
+
+                {postsLoading ? (
+                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-tertiary)' }}><Loader2 size={14} className="spin" style={{ verticalAlign: 'middle', marginRight: 6 }} /> Loading ads…</p>
+                ) : posts.length === 0 ? null : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                        {posts.map(p => <PostCard key={p.id} post={p} onDelete={handleDeletePost} onPublish={handlePublishPost} />)}
+                    </div>
+                )}
+            </div>
+
             <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+    )
+}
+
+const PostCard = ({ post, onDelete, onPublish }) => {
+    const [publishing, setPublishing] = useState(false)
+    const platforms = post.publishedPlatforms || []
+    const handlePublish = async (which) => {
+        setPublishing(true)
+        try { await onPublish(post.id, which) } finally { setPublishing(false) }
+    }
+    return (
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: `1px solid ${post.status === 'published' ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}` }}>
+            {post.imageUrl ? (
+                <img src={post.imageUrl} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
+            ) : (
+                <div style={{ width: '100%', aspectRatio: '1/1', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}><ImageIcon size={32} /></div>
+            )}
+            <div style={{ padding: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: 999, fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+                        background: post.status === 'published' ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)',
+                        color: post.status === 'published' ? '#10B981' : '#94A3B8',
+                    }}>{post.status}</span>
+                    {platforms.length > 0 && (
+                        <span style={{ display: 'flex', gap: '0.25rem' }}>
+                            {platforms.includes('instagram') && <Instagram size={14} color="#E1306C" />}
+                            {platforms.includes('facebook') && <Facebook size={14} color="#1877F2" />}
+                        </span>
+                    )}
+                </div>
+                {post.headline && <p style={{ margin: '0 0 0.25rem', fontWeight: 600, fontSize: '0.875rem' }}>{post.headline}</p>}
+                {post.body && <p style={{ margin: '0 0 0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{post.body}</p>}
+                {post.publishError && <p style={{ margin: '0 0 0.5rem', fontSize: '0.7rem', color: '#fca5a5' }}>⚠ {post.publishError}</p>}
+
+                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem' }}>
+                    {post.status !== 'published' && (
+                        <>
+                            <button onClick={() => handlePublish(['instagram'])} disabled={publishing} className="btn-secondary" title="Publish to Instagram" style={{ flex: 1, padding: '0.4rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem' }}>
+                                <Instagram size={12} /> IG
+                            </button>
+                            <button onClick={() => handlePublish(['facebook'])} disabled={publishing} className="btn-secondary" title="Publish to Facebook" style={{ flex: 1, padding: '0.4rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem' }}>
+                                <Facebook size={12} /> FB
+                            </button>
+                            <button onClick={() => handlePublish(['instagram', 'facebook'])} disabled={publishing} className="btn-primary" style={{ flex: 1.5, padding: '0.4rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', background: 'linear-gradient(90deg, #A78BFA, #38BDF8)' }}>
+                                {publishing ? <Loader2 size={12} className="spin" /> : <Send size={12} />} Both
+                            </button>
+                        </>
+                    )}
+                    <button onClick={() => onDelete(post.id)} className="btn-secondary" title="Delete" style={{ padding: '0.4rem 0.6rem', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#EF4444' }}>
+                        <Trash2 size={12} />
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }

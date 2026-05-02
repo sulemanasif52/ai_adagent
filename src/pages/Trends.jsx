@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Search, TrendingUp, MessageSquare, Globe, Newspaper, Sparkles, Loader2, ExternalLink } from 'lucide-react'
+import { Search, TrendingUp, MessageSquare, Globe, Newspaper, Sparkles, Loader2, ExternalLink, RefreshCw } from 'lucide-react'
 import { trendsAdLibrary, trendsReddit, trendsNews, trendsHN, trendsSynthesize } from '../lib/server'
 
 const PANELS = [
@@ -21,14 +21,14 @@ const Trends = () => {
     const setLoad = (id, v) => setLoading(prev => ({ ...prev, [id]: v }))
     const setErr = (id, v) => setErrors(prev => ({ ...prev, [id]: v }))
 
-    const fetchAll = async () => {
+    const fetchAll = async (fresh = false) => {
         setSynthesis(null)
 
         const tasks = [
-            ['adlib', () => trendsAdLibrary(keyword)],
-            ['reddit', () => trendsReddit(subreddit, 10)],
-            ['news',  () => trendsNews(keyword, 10)],
-            ['hn',    () => trendsHN(10)],
+            ['adlib', () => trendsAdLibrary(keyword, 'US', fresh)],
+            ['reddit', () => trendsReddit(subreddit, 10, 'day', fresh)],
+            ['news',  () => trendsNews(keyword, 10, fresh)],
+            ['hn',    () => trendsHN(10, fresh)],
         ]
         await Promise.all(tasks.map(async ([id, fn]) => {
             setLoad(id, true)
@@ -78,8 +78,11 @@ const Trends = () => {
                     <label style={{ display: 'block', fontWeight: 500, fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>Subreddit</label>
                     <input className="input-base" value={subreddit} onChange={e => setSubreddit(e.target.value)} placeholder="e.g. Entrepreneur" style={{ background: 'var(--bg-secondary)' }} />
                 </div>
-                <button onClick={fetchAll} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem' }}>
+                <button onClick={() => fetchAll(false)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem' }}>
                     <Search size={16} /> Pull signal
+                </button>
+                <button onClick={() => fetchAll(true)} title="Bypass cache and re-fetch from sources" className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem' }}>
+                    <RefreshCw size={14} /> Refresh
                 </button>
                 <button onClick={synthesize} disabled={synthLoading || !Object.values(results).some(r => r)} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem' }}>
                     {synthLoading ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />} Synthesize
