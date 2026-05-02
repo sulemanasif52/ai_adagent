@@ -1,0 +1,291 @@
+import React, { useEffect, useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, Loader2, Instagram, Facebook, Send, ExternalLink, Trash2, AlertTriangle, CheckCircle, Image as ImageIcon, DollarSign, MousePointerClick, Users, TrendingUp } from 'lucide-react'
+import { getCampaign, publishCampaign, deleteCampaign } from '../lib/server'
+
+const fmtMoney = (n) => n == null ? '—' : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+const fmtPct = (n) => n == null ? '—' : `${(n * 100).toFixed(0)}%`
+
+const STATUS_COLOR = {
+    draft:    { bg: 'rgba(100,116,139,0.15)', fg: '#94A3B8' },
+    active:   { bg: 'rgba(16,185,129,0.15)',  fg: '#10B981' },
+    paused:   { bg: 'rgba(245,158,11,0.15)',  fg: '#F59E0B' },
+    archived: { bg: 'rgba(100,116,139,0.15)', fg: '#64748B' },
+}
+
+export default function CampaignDetail() {
+    const { id } = useParams()
+    const navigate = useNavigate()
+    const [data, setData] = useState(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState('')
+    const [publishing, setPublishing] = useState(false)
+    const [publishResults, setPublishResults] = useState(null)
+    const [selectedPlatforms, setSelectedPlatforms] = useState({ instagram: true, facebook: true })
+
+    const load = () => {
+        setLoading(true)
+        getCampaign(id)
+            .then(r => {
+                setData(r)
+                const platforms = r.campaign.platforms || []
+                setSelectedPlatforms({
+                    instagram: platforms.includes('instagram'),
+                    facebook: platforms.includes('facebook'),
+                })
+            })
+            .catch(e => setError(e.message))
+            .finally(() => setLoading(false))
+    }
+
+    useEffect(() => { load() }, [id])  // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handlePublish = async () => {
+        const platforms = Object.entries(selectedPlatforms).filter(([_, v]) => v).map(([k]) => k)
+        if (platforms.length === 0) {
+            setPublishResults({ ok: false, results: [{ platform: '—', ok: false, error: 'Pick at least one platform' }] })
+            return
+        }
+        setPublishing(true)
+        setPublishResults(null)
+        try {
+            const r = await publishCampaign(id, { platforms })
+            setPublishResults(r)
+            // Refresh after publish in case status changed.
+            await load()
+        } catch (err) {
+            setPublishResults({ ok: false, results: [{ platform: 'all', ok: false, error: err.message }] })
+        } finally {
+            setPublishing(false)
+        }
+    }
+
+    const handleArchive = async () => {
+        if (!confirm('Archive this campaign? It will be hidden but metrics retained.')) return
+        try {
+            await deleteCampaign(id)
+            navigate('/dashboard')
+        } catch (err) {
+            alert('Archive failed: ' + err.message)
+        }
+    }
+
+    if (loading) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', padding: '3rem 0' }}>
+                <Loader2 size={18} className="spin" /> Loading campaign…
+                <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            </div>
+        )
+    }
+
+    if (error || !data) {
+        return (
+            <div className="card" style={{ padding: '2rem', textAlign: 'center', maxWidth: 480, margin: '2rem auto' }}>
+                <AlertTriangle size={32} color="var(--accent-warning)" style={{ marginBottom: '0.75rem' }} />
+                <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>Couldn't load campaign</h2>
+                <p style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{error || 'Not found'}</p>
+                <Link to="/dashboard" className="btn-primary" style={{ textDecoration: 'none' }}>Back to Dashboard</Link>
+            </div>
+        )
+    }
+
+    const { campaign, summary } = data
+    const images = campaign.imageUrls || []
+    const copy = campaign.copy || {}
+    const targeting = campaign.targeting || {}
+    const status = STATUS_COLOR[campaign.status] || STATUS_COLOR.draft
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <button onClick={() => navigate('/dashboard')} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem' }}>
+                        <ArrowLeft size={14} /> Back
+                    </button>
+                    <h1 style={{ margin: 0, fontSize: '1.5rem' }}>{campaign.name}</h1>
+                    <span style={{ padding: '0.2rem 0.6rem', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700, background: status.bg, color: status.fg, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{campaign.status}</span>
+                </div>
+                <button onClick={handleArchive} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#EF4444' }}>
+                    <Trash2 size={14} /> Archive
+                </button>
+            </div>
+
+            {/* Summary tiles */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                <Tile icon={DollarSign}        label="Total Spend"     value={fmtMoney(summary?.spend)} color="#38BDF8" />
+                <Tile icon={Users}             label="Leads Captured"  value={summary?.leads ?? 0} color="#A78BFA" />
+                <Tile icon={MousePointerClick} label="CTR"             value={summary?.ctr != null ? fmtPct(summary.ctr) : '—'} color="#10B981" />
+                <Tile icon={TrendingUp}        label="ROI"             value={summary?.roi != null ? fmtPct(summary.roi) : '—'} color={summary?.roi > 0 ? '#10B981' : '#94A3B8'} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1.5rem' }}>
+                {/* Left: creative + copy */}
+                <div className="card" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>Creative</h3>
+                    {images.length > 0 ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem' }}>
+                            {images.map((url, i) => (
+                                <a key={i} href={url} target="_blank" rel="noreferrer">
+                                    <img src={url} alt="" style={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 'var(--radius-md)' }} />
+                                </a>
+                            ))}
+                        </div>
+                    ) : (
+                        <div style={{ padding: '2rem', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', color: 'var(--text-tertiary)' }}>
+                            <ImageIcon size={32} style={{ margin: '0 auto 0.5rem' }} />
+                            <p style={{ margin: 0, fontSize: '0.85rem' }}>No image attached. Edit campaign to add one.</p>
+                        </div>
+                    )}
+
+                    {(copy.headlines?.length > 0 || copy.body || copy.cta) && (
+                        <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>Copy</h4>
+                            {copy.headlines?.length > 0 && (
+                                <div style={{ marginBottom: '0.5rem' }}>
+                                    {copy.headlines.map((h, i) => <p key={i} style={{ margin: '0 0 0.2rem', fontWeight: 600, fontSize: '0.95rem' }}>{i === 0 ? '🎯 ' : ''}{h}</p>)}
+                                </div>
+                            )}
+                            {copy.body && <p style={{ margin: '0 0 0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{copy.body}</p>}
+                            {copy.cta && <p style={{ margin: 0, fontSize: '0.85rem' }}><strong>CTA:</strong> {copy.cta}</p>}
+                        </div>
+                    )}
+
+                    {campaign.videoUrl && (
+                        <div style={{ marginTop: '1.25rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>Video / voiceover</h4>
+                            <audio controls src={campaign.videoUrl} style={{ width: '100%' }} />
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: settings + publish */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="card" style={{ padding: '1.5rem' }}>
+                        <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>Settings</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.875rem' }}>
+                            <Row k="Product" v={campaign.product || campaign.name} />
+                            <Row k="Daily budget" v={fmtMoney(campaign.dailyBudget)} />
+                            <Row k="Lifetime cap" v={fmtMoney(campaign.lifetimeCap)} />
+                            <Row k="Estimated revenue / lead" v={fmtMoney(campaign.estRevenue)} />
+                            <Row k="Created" v={new Date(campaign.createdAt).toLocaleDateString()} />
+                            {targeting?.location && (
+                                <Row k="Targeting" v={targeting.location.mode === 'ai' ? 'AI optimized' : `${targeting.location.target} (+${targeting.location.radiusMiles}mi)`} />
+                            )}
+                        </div>
+                        {campaign.description && (
+                            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                                <p style={{ margin: '0 0 0.5rem', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)' }}>Description</p>
+                                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{campaign.description}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Publish to networks */}
+                    <div className="card" style={{ padding: '1.5rem', borderTop: '3px solid #A78BFA' }}>
+                        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Send size={16} color="#A78BFA" /> Publish to networks
+                        </h3>
+                        <p style={{ margin: '0 0 1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            Posts an organic post to your linked Page/IG. Requires <code>pages_manage_posts</code> and <code>instagram_content_publish</code> permissions.
+                        </p>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                            <PlatformToggle
+                                icon={<Instagram size={18} color="#E1306C" />}
+                                label="Instagram (image post)"
+                                checked={selectedPlatforms.instagram}
+                                onChange={() => setSelectedPlatforms(p => ({ ...p, instagram: !p.instagram }))}
+                            />
+                            <PlatformToggle
+                                icon={<Facebook size={18} color="#1877F2" />}
+                                label="Facebook Page"
+                                checked={selectedPlatforms.facebook}
+                                onChange={() => setSelectedPlatforms(p => ({ ...p, facebook: !p.facebook }))}
+                            />
+                        </div>
+
+                        <button
+                            onClick={handlePublish}
+                            disabled={publishing}
+                            className="btn-primary"
+                            style={{
+                                width: '100%', display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem',
+                                padding: '0.75rem',
+                                background: 'linear-gradient(90deg, #A78BFA, #38BDF8)',
+                                opacity: publishing ? 0.7 : 1,
+                            }}
+                        >
+                            {publishing ? <><Loader2 size={16} className="spin" /> Publishing…</> : <><Send size={16} /> Publish now</>}
+                        </button>
+
+                        {publishResults && (
+                            <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                {publishResults.results.map((r, i) => (
+                                    <div key={i} style={{
+                                        padding: '0.6rem 0.75rem',
+                                        background: r.ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                                        border: `1px solid ${r.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                                        borderRadius: 'var(--radius-md)',
+                                        fontSize: '0.8rem',
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                    }}>
+                                        {r.ok ? <CheckCircle size={14} color="#10B981" /> : <AlertTriangle size={14} color="#EF4444" />}
+                                        <strong style={{ textTransform: 'capitalize' }}>{r.platform}:</strong>
+                                        {r.ok ? (
+                                            <>
+                                                Published successfully {r.mediaId && `(media ${r.mediaId})`}{r.postId && `(post ${r.postId})`}
+                                            </>
+                                        ) : (
+                                            <span style={{ color: '#fca5a5' }}>{r.error}</span>
+                                        )}
+                                    </div>
+                                ))}
+                                {publishResults.results.some(r => !r.ok && r.error?.includes('permission')) && (
+                                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                                        💡 Need to grant publishing permissions: <a href="/api/auth/facebook" style={{ color: 'var(--accent-primary)' }}>reconnect Facebook</a> and approve the new permissions on the consent screen.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+            <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+    )
+}
+
+const Row = ({ k, v }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ color: 'var(--text-secondary)' }}>{k}</span>
+        <span style={{ fontWeight: 500 }}>{v}</span>
+    </div>
+)
+
+const Tile = ({ icon: Icon, label, value, color }) => (
+    <div className="card" style={{ padding: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
+            <div style={{ padding: '0.4rem', background: `${color}20`, color, borderRadius: 'var(--radius-md)' }}>
+                <Icon size={14} />
+            </div>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{label}</p>
+        </div>
+        <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>{value}</p>
+    </div>
+)
+
+const PlatformToggle = ({ icon, label, checked, onChange }) => (
+    <label style={{
+        display: 'flex', alignItems: 'center', gap: '0.6rem',
+        padding: '0.6rem 0.75rem', cursor: 'pointer',
+        background: checked ? 'rgba(56, 189, 248, 0.06)' : 'var(--bg-secondary)',
+        border: `1px solid ${checked ? 'rgba(56, 189, 248, 0.3)' : 'var(--border-color)'}`,
+        borderRadius: 'var(--radius-md)',
+        transition: 'all 0.15s',
+    }}>
+        <input type="checkbox" checked={checked} onChange={onChange} style={{ accentColor: 'var(--accent-primary)' }} />
+        {icon}
+        <span style={{ flex: 1, fontSize: '0.875rem' }}>{label}</span>
+    </label>
+)

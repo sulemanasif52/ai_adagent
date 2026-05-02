@@ -7,6 +7,7 @@ import {
   getPageInsights,
   getPagePosts,
   getPostInsights,
+  publishPagePost,
 } from '../lib/facebook.js'
 
 const router = Router()
@@ -109,6 +110,35 @@ router.get('/page/posts/:id/insights', requireAuth, asyncRoute(async (req, res) 
     flat[m.name] = m.values?.[0]?.value ?? 0
   }
   res.json({ insights: flat })
+}))
+
+// --- POST /api/facebook/page/publish ---
+// Body: { message?, imageUrl?, campaignId? }
+// Posts to the user's connected FB Page. Either message or imageUrl required.
+// Requires `pages_manage_posts` scope on the Page Access Token.
+router.post('/page/publish', requireAuth, asyncRoute(async (req, res) => {
+  const cred = await loadPageCredentials(req.user.id)
+  let { message, imageUrl, campaignId } = req.body || {}
+  if (!message && !imageUrl) {
+    return res.status(400).json({ error: 'message or imageUrl required' })
+  }
+
+  if (imageUrl && imageUrl.startsWith('/')) {
+    const base = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`
+    imageUrl = base.replace(/\/$/, '') + imageUrl
+  }
+
+  try {
+    const result = await publishPagePost(cred.pageId, cred.pageToken, { message, imageUrl })
+    res.json({
+      ok: true,
+      network: 'facebook',
+      postId: result.id,
+      permalink: `https://www.facebook.com/${result.id}`,
+    })
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message, code: err.code, payload: err.payload })
+  }
 }))
 
 export default router

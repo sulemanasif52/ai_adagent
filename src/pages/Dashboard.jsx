@@ -87,7 +87,13 @@ const Dashboard = () => {
                                 </thead>
                                 <tbody>
                                     {campaigns.map((c) => (
-                                        <tr key={c.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                        <tr
+                                            key={c.id}
+                                            onClick={() => navigate(`/campaigns/${c.id}`)}
+                                            style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer', transition: 'background 0.15s' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        >
                                             <td style={{ padding: '1.25rem 1.5rem', fontWeight: 500 }}>{c.name}</td>
                                             <td style={{ padding: '1.25rem 1.5rem' }}><StatusBadge status={c.status} /></td>
                                             <td style={{ padding: '1.25rem 1.5rem', color: 'var(--text-secondary)' }}>{fmtMoney(c.summary?.spend)}</td>

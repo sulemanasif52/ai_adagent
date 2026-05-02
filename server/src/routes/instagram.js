@@ -8,6 +8,7 @@ import {
   getMedia,
   getMediaInsights,
   getMediaComments,
+  publishImageToInstagram,
 } from '../lib/instagram.js'
 
 const router = Router()
@@ -274,6 +275,44 @@ router.post('/sync', requireAuth, asyncRoute(async (req, res) => {
     errors,
     syncedAt: new Date().toISOString(),
   })
+}))
+
+// --- POST /api/instagram/publish ---
+// Body: { imageUrl, caption?, campaignId? }
+// Posts an image to the user's IG Business account. imageUrl must be public.
+// Requires `instagram_content_publish` scope on the Page token.
+router.post('/publish', requireAuth, asyncRoute(async (req, res) => {
+  const cred = await loadIgCredentials(req.user.id)
+  let { imageUrl, caption, campaignId } = req.body || {}
+  if (!imageUrl) return res.status(400).json({ error: 'imageUrl required' })
+
+  // If imageUrl is a relative /uploads/* path, expand to a public URL Meta can fetch.
+  if (imageUrl.startsWith('/')) {
+    const base = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`
+    imageUrl = base.replace(/\/$/, '') + imageUrl
+  }
+
+  try {
+    const result = await publishImageToInstagram(cred.igId, cred.pageToken, { imageUrl, caption })
+
+    // Stamp campaign with the published media id if provided.
+    if (campaignId) {
+      const owns = await prisma.campaign.findFirst({
+        where: { id: String(campaignId), userId: req.user.id },
+        select: { id: true },
+      })
+      if (owns) {
+        await prisma.campaign.update({
+          where: { id: owns.id },
+          data: { status: 'active' },
+        })
+      }
+    }
+
+    res.json({ ok: true, network: 'instagram', mediaId: result.mediaId, containerId: result.containerId, permalink: `https://www.instagram.com/p/${result.mediaId}` })
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message, code: err.code, payload: err.payload })
+  }
 }))
 
 export default router

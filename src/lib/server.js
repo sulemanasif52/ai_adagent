@@ -87,6 +87,11 @@ export const getCampaign        = (id) => req(`/campaigns/${id}`)
 export const updateCampaign     = (id, body) => req(`/campaigns/${id}`, { method: 'PUT', body })
 export const deleteCampaign     = (id) => req(`/campaigns/${id}`, { method: 'DELETE' })
 export const addCampaignMetric  = (id, body) => req(`/campaigns/${id}/metrics`, { method: 'POST', body })
+export const publishCampaign    = (id, body) => req(`/campaigns/${id}/publish`, { method: 'POST', body })
+
+// --- Direct platform publishing ---
+export const publishToInstagram = (body) => req('/instagram/publish', { method: 'POST', body })
+export const publishToFbPage    = (body) => req('/facebook/page/publish', { method: 'POST', body })
 
 // --- Leads / CRM ---
 export const listLeads   = (params) => req('/leads' + qs(params))

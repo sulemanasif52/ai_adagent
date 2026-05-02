@@ -1,6 +1,9 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth/middleware.js'
 import { prisma } from '../db.js'
+import { decrypt } from '../lib/crypto.js'
+import { publishImageToInstagram } from '../lib/instagram.js'
+import { publishPagePost } from '../lib/facebook.js'
 
 const router = Router()
 
@@ -147,6 +150,79 @@ router.delete('/:id', requireAuth, asyncRoute(async (req, res) => {
   if (!owner) return res.status(404).json({ error: 'not_found' })
   await prisma.campaign.update({ where: { id: owner.id }, data: { status: 'archived' } })
   res.json({ ok: true, archived: owner.id })
+}))
+
+// --- POST /api/campaigns/:id/publish ---
+// Posts the campaign's first generated image + headline/body to each platform
+// listed in campaign.platforms (currently supports facebook + instagram).
+// Body: { platforms?: ['facebook'|'instagram'], imageUrl?, caption? } — overrides allowed.
+router.post('/:id/publish', requireAuth, asyncRoute(async (req, res) => {
+  const c = await prisma.campaign.findFirst({
+    where: { id: req.params.id, userId: req.user.id },
+  })
+  if (!c) return res.status(404).json({ error: 'not_found' })
+
+  const cred = await prisma.metaCredential.findUnique({ where: { userId: req.user.id } })
+  if (!cred?.pageAccessToken) {
+    return res.status(412).json({ error: 'No Page Access Token. Reconnect Facebook with publishing permissions granted.' })
+  }
+  const pageToken = decrypt(cred.pageAccessToken)
+
+  const campImages = safeJson(c.imageUrls) || []
+  const campCopy = safeJson(c.copy) || {}
+  let imageUrl = req.body?.imageUrl || campImages[0] || null
+  const caption = req.body?.caption
+    || [campCopy.headlines?.[0], campCopy.body, campCopy.cta].filter(Boolean).join('\n\n')
+    || c.description
+    || c.name
+
+  // Expand /uploads/* to absolute URL Meta can fetch.
+  if (imageUrl && imageUrl.startsWith('/')) {
+    const base = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`
+    imageUrl = base.replace(/\/$/, '') + imageUrl
+  }
+
+  const requestedPlatforms = req.body?.platforms || safeJson(c.platforms) || ['facebook', 'instagram']
+  const results = []
+
+  for (const platform of requestedPlatforms) {
+    if (platform === 'instagram') {
+      if (!cred.igBusinessAccountId) {
+        results.push({ platform, ok: false, error: 'Instagram Business account not linked.' })
+        continue
+      }
+      if (!imageUrl) {
+        results.push({ platform, ok: false, error: 'Instagram requires an image. Add one to the campaign.' })
+        continue
+      }
+      try {
+        const r = await publishImageToInstagram(cred.igBusinessAccountId, pageToken, { imageUrl, caption })
+        results.push({ platform, ok: true, mediaId: r.mediaId })
+      } catch (err) {
+        results.push({ platform, ok: false, error: err.message })
+      }
+    } else if (platform === 'facebook') {
+      if (!cred.pageId) {
+        results.push({ platform, ok: false, error: 'Facebook Page not linked.' })
+        continue
+      }
+      try {
+        const r = await publishPagePost(cred.pageId, pageToken, { message: caption, imageUrl })
+        results.push({ platform, ok: true, postId: r.id })
+      } catch (err) {
+        results.push({ platform, ok: false, error: err.message })
+      }
+    } else {
+      results.push({ platform, ok: false, error: `Publishing to ${platform} is not yet supported (requires app review).` })
+    }
+  }
+
+  // If any platform succeeded, mark campaign active.
+  if (results.some(r => r.ok)) {
+    await prisma.campaign.update({ where: { id: c.id }, data: { status: 'active' } })
+  }
+
+  res.json({ ok: results.every(r => r.ok), results })
 }))
 
 // --- POST /api/campaigns/:id/metrics ---

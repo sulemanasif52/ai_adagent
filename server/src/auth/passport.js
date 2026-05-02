@@ -5,9 +5,24 @@ import { encrypt } from '../lib/crypto.js'
 import { env } from '../env.js'
 import { exchangeForLongLived, resolveInstagramAccount } from '../lib/meta-tokens.js'
 
-// Phase 0 scopes — only used if META_LOGIN_CONFIG_ID is NOT set.
+// Scopes — only used if META_LOGIN_CONFIG_ID is NOT set.
 // With Facebook Login for Business, permissions come from the configuration; scope is ignored.
-const SCOPES = ['email', 'public_profile']
+// To enable IG/FB publishing the configuration MUST also grant these:
+//   - instagram_content_publish (post images to IG Business)
+//   - pages_manage_posts (post to FB Page feed)
+//   - plus the Phase 2 read scopes (instagram_basic, pages_show_list, etc.)
+const SCOPES = [
+  'email',
+  'public_profile',
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_posts',
+  'instagram_basic',
+  'instagram_content_publish',
+  'instagram_manage_insights',
+  'instagram_manage_comments',
+  'business_management',
+]
 
 const strategy = new FacebookStrategy(
   {

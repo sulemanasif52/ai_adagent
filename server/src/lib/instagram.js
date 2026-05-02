@@ -103,3 +103,64 @@ export async function getMediaComments(mediaId, pageToken, { limit = 50 } = {}) 
   const data = await gget(url.toString())
   return data.data || []
 }
+
+// ─── Publishing (organic posts to user's IG Business account) ────────────────
+// Requires the `instagram_content_publish` scope. The image URL must be
+// publicly accessible (Meta fetches it server-side). Two-step flow:
+//   1. POST /{igId}/media with image_url + caption → returns container creationId
+//   2. POST /{igId}/media_publish with creationId → returns published media id
+
+async function gpost(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json()
+  if (!res.ok || data.error) {
+    const err = new Error(data?.error?.message || `IG Graph POST ${res.status}`)
+    err.code = data?.error?.code
+    err.status = res.status
+    err.payload = data?.error
+    throw err
+  }
+  return data
+}
+
+export async function createMediaContainer(igId, pageToken, { imageUrl, caption, mediaType = 'IMAGE' }) {
+  if (!imageUrl) throw new Error('imageUrl required')
+  const body = { image_url: imageUrl, access_token: pageToken }
+  if (caption) body.caption = String(caption).slice(0, 2200)
+  if (mediaType === 'REELS') body.media_type = 'REELS'
+  const data = await gpost(`${GRAPH}/${igId}/media`, body)
+  return data.id  // container creation id
+}
+
+export async function publishMediaContainer(igId, pageToken, creationId) {
+  const data = await gpost(`${GRAPH}/${igId}/media_publish`, {
+    creation_id: creationId,
+    access_token: pageToken,
+  })
+  return data.id  // published media id
+}
+
+// One-shot helper: create container, poll for ready (FINISHED status), publish.
+export async function publishImageToInstagram(igId, pageToken, { imageUrl, caption }) {
+  const containerId = await createMediaContainer(igId, pageToken, { imageUrl, caption })
+
+  // Poll status — Meta needs a moment to download & validate the image.
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 1500))
+    const statusUrl = new URL(`${GRAPH}/${containerId}`)
+    statusUrl.searchParams.set('fields', 'status_code,status')
+    statusUrl.searchParams.set('access_token', pageToken)
+    const status = await gget(statusUrl.toString()).catch(() => null)
+    if (status?.status_code === 'FINISHED') break
+    if (status?.status_code === 'ERROR') {
+      throw new Error(`IG container failed: ${status.status || 'unknown error'}`)
+    }
+  }
+
+  const mediaId = await publishMediaContainer(igId, pageToken, containerId)
+  return { mediaId, containerId }
+}

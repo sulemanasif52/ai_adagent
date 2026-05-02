@@ -12,6 +12,7 @@ import CRM from './pages/CRM'
 import Billing from './pages/Billing'
 import AdClick from './pages/AdClick'
 import Trends from './pages/Trends'
+import CampaignDetail from './pages/CampaignDetail'
 
 import { AuthProvider, useAuth } from './lib/auth-context'
 
@@ -61,6 +62,7 @@ function App() {
 
                 <Route path="/dashboard" element={<RequireAuth><DashboardLayout><Dashboard /></DashboardLayout></RequireAuth>} />
                 <Route path="/create-ad" element={<RequireAuth><DashboardLayout><CreateAd /></DashboardLayout></RequireAuth>} />
+                <Route path="/campaigns/:id" element={<RequireAuth><DashboardLayout><CampaignDetail /></DashboardLayout></RequireAuth>} />
                 <Route path="/analytics" element={<RequireAuth><DashboardLayout><Analytics /></DashboardLayout></RequireAuth>} />
                 <Route path="/crm" element={<RequireAuth><DashboardLayout><CRM /></DashboardLayout></RequireAuth>} />
                 <Route path="/trends" element={<RequireAuth><DashboardLayout><Trends /></DashboardLayout></RequireAuth>} />

@@ -77,6 +77,48 @@ export async function getPagePosts(pageId, pageToken, { limit = 12 } = {}) {
   return data.data || []
 }
 
+// ─── Publishing (organic posts to user's FB Page) ────────────────────────────
+// Requires `pages_manage_posts` scope on the Page Access Token.
+// Two endpoints:
+//   - /{pageId}/photos for image posts (`url` + `message`)
+//   - /{pageId}/feed for text-only posts (`message`)
+
+async function gpost(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json()
+  if (!res.ok || data.error) {
+    const err = new Error(data?.error?.message || `FB Graph POST ${res.status}`)
+    err.code = data?.error?.code
+    err.status = res.status
+    err.payload = data?.error
+    throw err
+  }
+  return data
+}
+
+export async function publishPagePost(pageId, pageToken, { message, imageUrl }) {
+  if (!message && !imageUrl) throw new Error('message or imageUrl required')
+  if (imageUrl) {
+    // Image post via /photos. Meta fetches the URL server-side.
+    const data = await gpost(`${GRAPH}/${pageId}/photos`, {
+      url: imageUrl,
+      caption: message || '',
+      access_token: pageToken,
+    })
+    return { id: data.post_id || data.id, photoId: data.id }
+  }
+  // Text-only post via /feed.
+  const data = await gpost(`${GRAPH}/${pageId}/feed`, {
+    message,
+    access_token: pageToken,
+  })
+  return { id: data.id }
+}
+
 export async function getPostInsights(postId, pageToken) {
   const url = new URL(`${GRAPH}/${postId}/insights`)
   url.searchParams.set(
