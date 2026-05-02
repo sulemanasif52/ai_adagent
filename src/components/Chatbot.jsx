@@ -204,8 +204,21 @@ const Chatbot = ({ mode = 'floating', isOpenTrigger = false }) => {
                                 type="text"
                                 value={inputValue}
                                 onChange={e => setInputValue(e.target.value)}
-                                placeholder="Ask about targeting, sizes..."
-                                style={{ flex: 1, border: 'none', background: 'transparent', padding: '0.5rem 1rem', outline: 'none', fontSize: '0.875rem' }}
+                                placeholder="Ask about your IG, campaigns, leads..."
+                                className="chatbot-input"
+                                autoComplete="off"
+                                spellCheck={false}
+                                style={{
+                                    flex: 1,
+                                    border: 'none',
+                                    background: 'transparent',
+                                    padding: '0.5rem 1rem',
+                                    outline: 'none',
+                                    fontSize: '0.875rem',
+                                    color: '#ffffff',
+                                    WebkitTextFillColor: '#ffffff',
+                                    caretColor: '#ffffff',
+                                }}
                             />
                             <button type="submit" disabled={isTyping} style={{ background: isTyping ? 'var(--text-secondary)' : 'var(--accent-primary)', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isTyping ? 'not-allowed' : 'pointer', flexShrink: 0, transition: 'background 0.2s' }}>
                                 <Send size={16} style={{ marginLeft: '2px' }} />
@@ -242,6 +255,22 @@ const Chatbot = ({ mode = 'floating', isOpenTrigger = false }) => {
 
             <style>{`
                 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+                .chatbot-input,
+                .chatbot-input:focus,
+                .chatbot-input:hover,
+                .chatbot-input:active {
+                  color: #F8FAFC !important;
+                  -webkit-text-fill-color: #F8FAFC !important;
+                  caret-color: #F8FAFC;
+                }
+                .chatbot-input::placeholder { color: #94A3B8 !important; opacity: 0.8 !important; }
+                .chatbot-input:-webkit-autofill,
+                .chatbot-input:-webkit-autofill:hover,
+                .chatbot-input:-webkit-autofill:focus {
+                  -webkit-text-fill-color: #F8FAFC !important;
+                  -webkit-box-shadow: 0 0 0 1000px var(--bg-primary) inset !important;
+                  transition: background-color 9999s ease-in-out 0s;
+                }
             `}</style>
         </div>
     )
