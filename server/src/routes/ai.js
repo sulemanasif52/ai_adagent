@@ -144,12 +144,14 @@ router.post('/generate-image', requireAuth, asyncRoute(async (req, res) => {
 
 // --- POST /api/ai/analyze ---
 // Entry point for CreateAd's "Analyze & Generate Ad" button. Single call that
-// suggests targeting + headlines + body + CTA. Prefers Anthropic for quality;
-// falls back to Groq/Gemini.
+// suggests targeting + headlines + body + CTA. Prefers Anthropic for quality
+// (and uses vision when uploaded images are provided); falls back to Groq/Gemini.
 // body: { description, mediaUrls?, productName? }
 router.post('/analyze', requireAuth, asyncRoute(async (req, res) => {
   const { description, mediaUrls = [], productName } = req.body || {}
-  if (!description) return res.status(400).json({ error: 'description required' })
+  if (!description && mediaUrls.length === 0) {
+    return res.status(400).json({ error: 'description or mediaUrls required' })
+  }
 
   const keys = await loadKeys(req.user.id)
   const provider = pickTextProvider(keys, 'anthropic')
@@ -157,12 +159,39 @@ router.post('/analyze', requireAuth, asyncRoute(async (req, res) => {
     return res.status(400).json({ error: 'No LLM key configured.' })
   }
 
+  // Resolve relative /uploads/* URLs to absolute so Anthropic can fetch them.
+  const absoluteImageUrls = (mediaUrls || []).map(u => {
+    if (u.startsWith('/')) {
+      const base = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`
+      return base.replace(/\/$/, '') + u
+    }
+    return u
+  })
+
+  const useVision = provider === 'anthropic' && absoluteImageUrls.length > 0
+
+  const visionInstr = useVision
+    ? '\nThe user has attached an image. Describe what you see and tailor the copy to the actual product visible in the image.'
+    : ''
+
   const messages = [
     { role: 'system', content: 'You are an expert direct-response marketer. Return ONLY valid JSON, no prose.' },
-    { role: 'user', content: `Product description: ${description}${productName ? `\nProduct name: ${productName}` : ''}${mediaUrls.length ? `\nMedia provided: ${mediaUrls.length} file(s)` : ''}\n\nAnalyze the product, infer the ideal target audience, and produce ad copy.\n\nReturn JSON exactly in this shape:\n{\n  "audience": "1-sentence audience description",\n  "targeting": {\n    "demographics": ["..."],\n    "interests": ["..."],\n    "ageRange": "min-max",\n    "platforms": ["facebook", "instagram"]\n  },\n  "imagePrompt": "1-sentence prompt suitable for an image-generation model",\n  "copy": {\n    "headlines": ["3 short headline variations"],\n    "body": "1-2 sentences",\n    "cta": "2-3 word call-to-action"\n  }\n}` },
+    { role: 'user', content: `Product description: ${description || '(image only — describe what you see and write ad copy)'}${productName ? `\nProduct name: ${productName}` : ''}${absoluteImageUrls.length ? `\nMedia provided: ${absoluteImageUrls.length} file(s)` : ''}${visionInstr}\n\nAnalyze the product, infer the ideal target audience, and produce ad copy.\n\nReturn JSON exactly in this shape:\n{\n  "audience": "1-sentence audience description",\n  "targeting": {\n    "demographics": ["..."],\n    "interests": ["..."],\n    "ageRange": "min-max",\n    "platforms": ["facebook", "instagram"]\n  },\n  "imagePrompt": "1-sentence prompt suitable for an image-generation model — only used if user did NOT upload their own image",\n  "copy": {\n    "headlines": ["3 short headline variations"],\n    "body": "1-2 sentences",\n    "cta": "2-3 word call-to-action"\n  }\n}` },
   ]
 
-  const out = await callText({ provider, keys, messages, json: provider !== 'anthropic', maxTokens: 1200 })
+  let out
+  if (useVision) {
+    // Vision call (Anthropic only — Gemini vision API has different shape).
+    out = await anthropic.chat({
+      apiKey: keys.anthropicKey,
+      messages,
+      maxTokens: 1500,
+      imageUrls: absoluteImageUrls,
+    })
+  } else {
+    out = await callText({ provider, keys, messages, json: provider !== 'anthropic', maxTokens: 1200 })
+  }
+
   const parsed = safeParseJson(out.text)
   if (!parsed) {
     return res.status(502).json({ error: 'AI returned non-JSON output', raw: out.text?.slice(0, 500) })
@@ -174,6 +203,7 @@ router.post('/analyze', requireAuth, asyncRoute(async (req, res) => {
     imagePrompt: parsed.imagePrompt || description,
     copy: parsed.copy || { headlines: [], body: '', cta: '' },
     provider,
+    usedVision: useVision,
   })
 }))
 

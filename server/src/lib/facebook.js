@@ -119,6 +119,16 @@ export async function publishPagePost(pageId, pageToken, { message, imageUrl }) 
   return { id: data.id }
 }
 
+// Comments on a Page post. Requires `pages_read_engagement` (already granted).
+export async function getPagePostComments(postId, pageToken, { limit = 50 } = {}) {
+  const url = new URL(`${GRAPH}/${postId}/comments`)
+  url.searchParams.set('fields', 'id,from,message,created_time,like_count')
+  url.searchParams.set('limit', String(limit))
+  url.searchParams.set('access_token', pageToken)
+  const data = await gget(url.toString())
+  return data.data || []
+}
+
 export async function getPostInsights(postId, pageToken) {
   const url = new URL(`${GRAPH}/${postId}/insights`)
   url.searchParams.set(

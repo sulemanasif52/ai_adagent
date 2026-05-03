@@ -133,8 +133,12 @@ const CreateAd = () => {
                 mediaUrls: uploadedImages.map(u => u.url),
             })
             setAnalysis(result)
-            // Kick off image generation in the background using the AI's suggested prompt.
-            if (result.imagePrompt) {
+            // If the user uploaded their own image, use that as the ad creative
+            // — don't generate a new one. Otherwise generate from AI suggestion.
+            if (uploadedImages.length > 0) {
+                setGeneratedImageUrl(uploadedImages[0].url)
+                setImageLoadFailed(false)
+            } else if (result.imagePrompt) {
                 setLastImagePrompt(result.imagePrompt)
                 generateAdImage(result.imagePrompt)
             }
@@ -356,7 +360,7 @@ const CreateAd = () => {
                                     {analysis.copy?.cta && <p style={{ margin: 0, fontSize: '0.85rem' }}><strong>CTA:</strong> {analysis.copy.cta}</p>}
                                     {(genImgLoading || generatedImageUrl || genImgError) && (
                                         <div style={{ marginTop: '1rem' }}>
-                                            <strong style={{ fontSize: '0.85rem' }}>Generated image:</strong>
+                                            <strong style={{ fontSize: '0.85rem' }}>{uploadedImages.length > 0 ? 'Your image (will be used for the ad):' : 'Generated image:'}</strong>
                                             <div style={{ marginTop: '0.5rem' }}>
                                                 {genImgLoading && <Loader2 size={20} className="spin" />}
                                                 {generatedImageUrl && !imageLoadFailed && (

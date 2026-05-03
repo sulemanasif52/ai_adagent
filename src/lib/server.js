@@ -53,6 +53,7 @@ export const getFbPage         = () => req('/facebook/page')
 export const getFbPageInsights = (days = 7) => req(`/facebook/page/insights?days=${days}`)
 export const getFbPagePosts    = (limit = 12) => req(`/facebook/page/posts?limit=${limit}`)
 export const getFbPostInsights = id => req(`/facebook/page/posts/${id}/insights`)
+export const getFbPostComments = (id, limit = 50) => req(`/facebook/page/posts/${id}/comments?limit=${limit}`)
 
 // --- AI generation ---
 export const aiGenerateCopy   = body => req('/ai/generate-copy', { method: 'POST', body })

@@ -7,8 +7,10 @@ import {
   getPageInsights,
   getPagePosts,
   getPostInsights,
+  getPagePostComments,
   publishPagePost,
 } from '../lib/facebook.js'
+import * as groq from '../lib/ai/groq.js'
 
 const router = Router()
 
@@ -99,6 +101,54 @@ router.get('/page/posts', requireAuth, asyncRoute(async (req, res) => {
       shares: p.shares?.count ?? 0,
     })),
   })
+}))
+
+// --- /api/facebook/page/posts/:id/comments ---
+// Fetches comments + (if Groq key set) classifies sentiment inline so the
+// frontend Comments tab can render IG + FB side-by-side with sentiment dots.
+router.get('/page/posts/:id/comments', requireAuth, asyncRoute(async (req, res) => {
+  const cred = await loadPageCredentials(req.user.id)
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100)
+
+  const raw = await getPagePostComments(req.params.id, cred.pageToken, { limit })
+  let comments = raw.map(c => ({
+    id: c.id,
+    text: c.message || '',
+    username: c.from?.name || null,
+    timestamp: c.created_time ? new Date(c.created_time).toISOString() : null,
+    likeCount: c.like_count ?? 0,
+    network: 'facebook',
+    analysis: null,
+  }))
+
+  // Inline sentiment via Groq if available + comments to classify.
+  const keys = await prisma.byokKey.findUnique({ where: { userId: req.user.id } })
+  if (keys?.groqKey && comments.length > 0) {
+    try {
+      const apiKey = (await import('../lib/crypto.js')).decrypt(keys.groqKey)
+      const prompt = `Classify these ${comments.length} Facebook comments. Return ONLY JSON {"results":[{"id":"...","sentiment":"positive|neutral|negative|question","intent":"praise|complaint|question|spam|other","confidence":0.0-1.0}]}.\n\n` +
+        comments.map((c, i) => `${i + 1}. id=${c.id} text=${JSON.stringify(c.text)}`).join('\n')
+      const out = await groq.chat({
+        apiKey,
+        messages: [
+          { role: 'system', content: 'You are a precise comment classifier. Return only valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+        json: true,
+        maxTokens: 1500,
+      })
+      const parsed = JSON.parse(out.text.match(/\{[\s\S]*\}/)?.[0] || '{}')
+      const byId = new Map((parsed.results || []).map(r => [r.id, r]))
+      comments = comments.map(c => {
+        const a = byId.get(c.id)
+        return a ? { ...c, analysis: { sentiment: a.sentiment, intent: a.intent || null, confidence: a.confidence ?? 0.5 } } : c
+      })
+    } catch (err) {
+      console.warn('[fb-comments] sentiment classify failed:', err.message)
+    }
+  }
+
+  res.json({ comments })
 }))
 
 // --- /api/facebook/page/posts/:id/insights ---

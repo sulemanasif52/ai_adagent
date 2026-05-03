@@ -4,7 +4,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 import StatCard from '../components/StatCard'
 import {
     getIgAccount, getIgInsights, getIgPosts, getIgPostComments, syncInstagram,
-    getFbPage, getFbPageInsights, getFbPagePosts,
+    getFbPage, getFbPageInsights, getFbPagePosts, getFbPostComments,
     listRecommendations, mlAudienceClusters, mlRunAll, mlSentiment,
 } from '../lib/server'
 
@@ -331,31 +331,54 @@ function FacebookTab({ days }) {
 
 function CommentsTab({ posts }) {
     const [data, setData] = useState({})  // postId → comments | { error }
+    const [fbPosts, setFbPosts] = useState([])
     const [loadingId, setLoadingId] = useState(null)
     const [autoLoading, setAutoLoading] = useState(true)
     const [classifying, setClassifying] = useState(false)
     const [classifyMsg, setClassifyMsg] = useState('')
+    const [networkFilter, setNetworkFilter] = useState('all')  // all | instagram | facebook
 
-    // Pre-load comments for ALL visible posts on mount.
+    // Pre-load comments for IG posts (top 10 with comments) AND fetch FB posts + their comments.
     useEffect(() => {
         let cancelled = false
-        const targets = posts.filter(p => p.commentsCount > 0).slice(0, 10)
-        if (!targets.length) {
-            setAutoLoading(false)
-            return
-        }
         ;(async () => {
-            for (const p of targets) {
+            // Load FB posts list first.
+            try {
+                const r = await getFbPagePosts(8)
+                if (!cancelled) setFbPosts(r.posts || [])
+            } catch {
+                // FB Page might not be connected — silently skip.
+            }
+            if (cancelled) return
+
+            const igTargets = posts.filter(p => p.commentsCount > 0).slice(0, 10)
+            const fbTargets = (await getFbPagePosts(8).catch(() => ({ posts: [] }))).posts.filter(p => p.comments > 0).slice(0, 8)
+
+            // Load IG comments
+            for (const p of igTargets) {
                 if (cancelled) break
                 try {
                     const r = await getIgPostComments(p.id, true)
                     if (cancelled) break
-                    setData(prev => ({ ...prev, [p.id]: r.comments || [] }))
+                    setData(prev => ({ ...prev, [`ig:${p.id}`]: { network: 'instagram', post: p, comments: r.comments || [] } }))
                 } catch (err) {
                     if (cancelled) break
-                    setData(prev => ({ ...prev, [p.id]: { error: err.message } }))
+                    setData(prev => ({ ...prev, [`ig:${p.id}`]: { error: err.message, network: 'instagram', post: p } }))
                 }
             }
+            // Load FB comments
+            for (const p of fbTargets) {
+                if (cancelled) break
+                try {
+                    const r = await getFbPostComments(p.id, 50)
+                    if (cancelled) break
+                    setData(prev => ({ ...prev, [`fb:${p.id}`]: { network: 'facebook', post: p, comments: r.comments || [] } }))
+                } catch (err) {
+                    if (cancelled) break
+                    setData(prev => ({ ...prev, [`fb:${p.id}`]: { error: err.message, network: 'facebook', post: p } }))
+                }
+            }
+
             if (!cancelled) setAutoLoading(false)
         })()
         return () => { cancelled = true }
@@ -458,42 +481,67 @@ function CommentsTab({ posts }) {
                 </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {posts.map(p => {
-                    const comments = data[p.id]
-                    const isLoading = loadingId === p.id
-                    return (
-                        <div key={p.id} className="card" style={{ padding: '1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                {(p.thumbnailUrl || p.mediaUrl) ? <img src={p.thumbnailUrl || p.mediaUrl} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }} /> : <div style={{ width: 56, height: 56, background: 'var(--bg-tertiary)', borderRadius: 8 }} />}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', fontWeight: 500, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.caption || '(no caption)'}</p>
-                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{p.commentsCount || 0} comments · {new Date(p.timestamp).toLocaleDateString()}</p>
-                                </div>
-                                <button className="btn-secondary" onClick={() => loadComments(p.id)} disabled={isLoading} style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}>
-                                    {isLoading ? <Loader2 size={14} className="spin" /> : (comments ? 'Reload' : 'Load comments')}
-                                </button>
-                            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                {[
+                    { id: 'all', label: 'All' },
+                    { id: 'instagram', label: 'Instagram' },
+                    { id: 'facebook', label: 'Facebook' },
+                ].map(f => (
+                    <button key={f.id} onClick={() => setNetworkFilter(f.id)} className="btn-secondary" style={{
+                        padding: '0.4rem 0.8rem', fontSize: '0.75rem',
+                        background: networkFilter === f.id ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+                        color: networkFilter === f.id ? 'white' : 'var(--text-secondary)',
+                    }}>
+                        {f.label}
+                    </button>
+                ))}
+            </div>
 
-                            {Array.isArray(comments) && comments.length > 0 && (
-                                <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                    {comments.slice(0, 10).map(c => (
-                                        <div key={c.id} style={{ display: 'flex', gap: '0.5rem', padding: '0.4rem 0.6rem', background: 'var(--bg-secondary)', borderRadius: 6 }}>
-                                            <SentimentDot sentiment={c.analysis?.sentiment} />
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>@{c.username || 'anon'}</span>
-                                                <span style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>{c.text}</span>
-                                            </div>
-                                            {c.analysis?.intent && (
-                                                <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: 4, background: 'rgba(167,139,250,0.15)', color: '#A78BFA', textTransform: 'capitalize' }}>{c.analysis.intent}</span>
-                                            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {Object.entries(data)
+                    .filter(([_, d]) => !d.error && (networkFilter === 'all' || d.network === networkFilter))
+                    .map(([key, d]) => {
+                        const p = d.post
+                        const comments = d.comments || []
+                        const isIg = d.network === 'instagram'
+                        const thumb = isIg ? (p.thumbnailUrl || p.mediaUrl) : p.image
+                        const caption = isIg ? p.caption : p.message
+                        const commentsCount = isIg ? p.commentsCount : p.comments
+                        const timestamp = isIg ? p.timestamp : p.createdAt
+                        return (
+                            <div key={key} className="card" style={{ padding: '1rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    {thumb ? <img src={thumb} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8 }} /> : <div style={{ width: 56, height: 56, background: 'var(--bg-tertiary)', borderRadius: 8 }} />}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.25rem' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: 999, background: isIg ? 'rgba(225,48,108,0.15)' : 'rgba(24,119,242,0.15)', color: isIg ? '#E1306C' : '#1877F2', fontWeight: 700 }}>
+                                                {isIg ? <Instagram size={9} /> : <Facebook size={9} />} {isIg ? 'IG' : 'FB'}
+                                            </span>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 500, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{caption || '(no caption)'}</p>
                                         </div>
-                                    ))}
-                                    {comments.length === 0 && <Empty msg="No comments on this post." />}
+                                        <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{commentsCount || 0} comments · {timestamp ? new Date(timestamp).toLocaleDateString() : ''}</p>
+                                    </div>
                                 </div>
-                            )}
-                            {comments?.error && <p style={{ margin: '0.5rem 0 0', color: '#fca5a5', fontSize: '0.8rem' }}>{comments.error}</p>}
-                        </div>
+
+                                {comments.length > 0 ? (
+                                    <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                        {comments.slice(0, 10).map(c => (
+                                            <div key={c.id} style={{ display: 'flex', gap: '0.5rem', padding: '0.4rem 0.6rem', background: 'var(--bg-secondary)', borderRadius: 6 }}>
+                                                <SentimentDot sentiment={c.analysis?.sentiment} />
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{c.username ? (isIg ? '@' + c.username : c.username) : 'anon'}</span>
+                                                    <span style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>{c.text}</span>
+                                                </div>
+                                                {c.analysis?.intent && (
+                                                    <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: 4, background: 'rgba(167,139,250,0.15)', color: '#A78BFA', textTransform: 'capitalize' }}>{c.analysis.intent}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p style={{ margin: '0.5rem 0 0 4.5rem', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>No comments fetched.</p>
+                                )}
+                            </div>
                     )
                 })}
             </div>

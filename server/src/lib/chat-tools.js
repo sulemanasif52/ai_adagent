@@ -133,15 +133,15 @@ export const TOOL_DEFS = [
     type: 'function',
     function: {
       name: 'list_recent_posts',
-      description: 'Lists this campaign\'s most recent posts (CampaignPost records) — what\'s been generated and published.',
-      parameters: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 30 } }, required: [] },
+      description: 'Lists ALL the user\'s recently drafted ad posts across every campaign. Call this for any question about "drafted ads", "recent ads", "what posts have I made", "my creatives", "what have I generated", etc. Returns each post\'s headline, status (draft/published), publish date, and which platforms (IG/FB) it was published to.',
+      parameters: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 30, description: 'How many posts to return (default 10).' } }, required: [] },
     },
   },
   {
     type: 'function',
     function: {
       name: 'get_active_recommendations',
-      description: 'Returns active (not-yet-applied or dismissed) ML recommendations across all types.',
+      description: 'Returns active (not-yet-applied or dismissed) ML recommendations: anomaly alerts, best-time-to-post, forecasts, hashtag suggestions, budget tips. Call this for "what should I do next", "any insights", "any alerts", "what does the AI suggest".',
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
