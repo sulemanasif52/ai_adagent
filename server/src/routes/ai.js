@@ -33,14 +33,54 @@ async function loadKeys(userId) {
 
 // Pick the best available provider based on which keys the user has configured.
 function pickTextProvider(keys, preferred) {
+  // Priority order matters for daily quota distribution:
+  // - Gemini: 1M tokens/day free (most generous — use for heavy gen tasks)
+  // - Anthropic: paid but best quality (use when explicitly preferred)
+  // - Groq: 100k tokens/day free (preserve for chatbot tool-calling)
   const order = preferred ? [preferred] : []
-  order.push('groq', 'gemini', 'anthropic')
+  order.push('gemini', 'anthropic', 'groq')
   for (const p of order) {
-    if (p === 'groq' && keys.groqKey) return 'groq'
     if (p === 'gemini' && keys.geminiKey) return 'gemini'
     if (p === 'anthropic' && keys.anthropicKey) return 'anthropic'
+    if (p === 'groq' && keys.groqKey) return 'groq'
   }
   return null
+}
+
+// Wraps callText with auto-fallback when the primary provider returns 429.
+async function callTextWithFallback({ keys, preferred, messages, json = false, maxTokens = 1024 }) {
+  const tried = []
+  // Try preferred first, then fall through other available providers.
+  const candidates = []
+  if (preferred && (
+    (preferred === 'gemini' && keys.geminiKey) ||
+    (preferred === 'anthropic' && keys.anthropicKey) ||
+    (preferred === 'groq' && keys.groqKey)
+  )) candidates.push(preferred)
+  if (keys.geminiKey && !candidates.includes('gemini')) candidates.push('gemini')
+  if (keys.anthropicKey && !candidates.includes('anthropic')) candidates.push('anthropic')
+  if (keys.groqKey && !candidates.includes('groq')) candidates.push('groq')
+
+  let lastErr
+  for (const p of candidates) {
+    try {
+      const out = await callText({ provider: p, keys, messages, json, maxTokens })
+      return { ...out, _provider: p, _tried: tried }
+    } catch (err) {
+      tried.push({ provider: p, error: err.message, status: err.status })
+      const isRateLimit = err.status === 429 || /rate.?limit/i.test(err.message || '')
+      if (!isRateLimit) {
+        // Non-quota error — surface it instead of silently falling through.
+        err._provider = p
+        err._tried = tried
+        throw err
+      }
+      lastErr = err
+    }
+  }
+  const e = lastErr || new Error('No text provider available')
+  e._tried = tried
+  throw e
 }
 
 async function callText({ provider, keys, messages, json = false, maxTokens = 1024 }) {
@@ -91,13 +131,18 @@ router.post('/generate-copy', requireAuth, asyncRoute(async (req, res) => {
     { role: 'user', content: `Generate ad copy as JSON: {"headlines": ["..."], "body": "...", "cta": "..."}.\n\nBrand: ${brand || 'unspecified'}\nAudience: ${audience || 'unspecified'}\nKey points: ${(points || []).join(', ') || 'none provided'}\nTone: ${tone}\n\nProvide 3 headline variations and 1 body copy. Return ONLY the JSON object.` },
   ]
 
-  const out = await callText({ provider, keys, messages: prompt, json: true, maxTokens: 800 })
+  let out
+  try {
+    out = await callTextWithFallback({ keys, preferred: preferred || provider, messages: prompt, json: true, maxTokens: 800 })
+  } catch (err) {
+    return res.status(err.status || 502).json({ error: err.message, tried: err._tried })
+  }
   const parsed = safeParseJson(out.text) || {}
   res.json({
     headlines: Array.isArray(parsed.headlines) ? parsed.headlines : [],
     body: parsed.body || '',
     cta: parsed.cta || 'Learn more',
-    provider,
+    provider: out._provider || provider,
     raw: parsed,
   })
 }))
@@ -186,23 +231,27 @@ router.post('/analyze', requireAuth, asyncRoute(async (req, res) => {
   ]
 
   let out
-  if (visionProvider === 'anthropic') {
-    out = await anthropic.chat({
-      apiKey: keys.anthropicKey,
-      messages,
-      maxTokens: 1500,
-      imageUrls: absoluteImageUrls,
-    })
-  } else if (visionProvider === 'gemini') {
-    out = await gemini.chat({
-      apiKey: keys.geminiKey,
-      messages,
-      maxTokens: 1500,
-      imageUrls: absoluteImageUrls,
-      json: true,
-    })
-  } else {
-    out = await callText({ provider, keys, messages, json: provider !== 'anthropic', maxTokens: 1200 })
+  try {
+    if (visionProvider === 'anthropic') {
+      out = await anthropic.chat({
+        apiKey: keys.anthropicKey,
+        messages,
+        maxTokens: 1500,
+        imageUrls: absoluteImageUrls,
+      })
+    } else if (visionProvider === 'gemini') {
+      out = await gemini.chat({
+        apiKey: keys.geminiKey,
+        messages,
+        maxTokens: 1500,
+        imageUrls: absoluteImageUrls,
+        json: true,
+      })
+    } else {
+      out = await callTextWithFallback({ keys, preferred: provider, messages, json: provider !== 'anthropic', maxTokens: 1200 })
+    }
+  } catch (err) {
+    return res.status(err.status || 502).json({ error: err.message, tried: err._tried })
   }
 
   const parsed = safeParseJson(out.text)
@@ -239,7 +288,12 @@ router.post('/generate-script', requireAuth, asyncRoute(async (req, res) => {
     { role: 'user', content: `Product: ${product || 'unspecified'}\nDescription: ${description || ''}\nTotal duration: ${durationSec} seconds (${sceneCount} scenes).\n\nReturn JSON:\n{\n  "hook": "first 3-second attention grabber, max 8 words",\n  "scenes": [\n    {\n      "description": "what the visual shows (image-gen prompt friendly)",\n      "voiceoverLine": "what the narrator says — 1 short sentence",\n      "durationSec": ${Math.round(durationSec / sceneCount)}\n    }\n  ],\n  "cta": "final 2-3 word CTA"\n}\n\nProduce exactly ${sceneCount} scenes.` },
   ]
 
-  const out = await callText({ provider, keys, messages, json: provider !== 'anthropic', maxTokens: 1500 })
+  let out
+  try {
+    out = await callTextWithFallback({ keys, preferred: provider, messages, json: provider !== 'anthropic', maxTokens: 1500 })
+  } catch (err) {
+    return res.status(err.status || 502).json({ error: err.message, tried: err._tried })
+  }
   const parsed = safeParseJson(out.text)
   if (!parsed) {
     return res.status(502).json({ error: 'AI returned non-JSON', raw: out.text?.slice(0, 500) })
