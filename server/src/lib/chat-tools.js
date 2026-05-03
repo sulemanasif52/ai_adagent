@@ -145,6 +145,14 @@ export const TOOL_DEFS = [
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_account_overview',
+      description: 'BIG-PICTURE one-shot snapshot: returns IG followers + recent reach + post count, FB Page fans + reach, count of campaigns, count of drafted/published ads, count of leads, count of active recommendations, comment-sentiment counts. Call this when the user asks "give me an overview", "summary", "how am I doing", "what is going on", or to seed the conversation with full context before asking specifics.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
 ]
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -397,21 +405,57 @@ const HANDLERS = {
   },
 
   async list_recent_posts({ limit = 10 }, userId) {
-    const rows = await prisma.campaignPost.findMany({
+    const cap = Math.min(Number(limit) || 10, 30)
+    // Source 1: new CampaignPost rows (multi-ad-per-campaign)
+    const newPosts = await prisma.campaignPost.findMany({
       where: { campaign: { userId } },
       orderBy: { createdAt: 'desc' },
-      take: Math.min(Number(limit) || 10, 30),
+      take: cap,
       include: { campaign: { select: { name: true } } },
     })
-    return {
-      posts: rows.map(p => ({
+    // Source 2: legacy campaigns where the campaign itself is the ad
+    // (created before we added CampaignPost). Include them so the chatbot
+    // doesn't say "no ads" when there are clearly old ads.
+    const legacy = await prisma.campaign.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: cap,
+    })
+
+    const combined = [
+      ...newPosts.map(p => ({
         id: p.id,
         campaign: p.campaign?.name,
         headline: p.headline,
+        body: p.body?.slice(0, 200),
         status: p.status,
+        createdAt: p.createdAt,
         publishedAt: p.publishedAt,
         platforms: p.publishedPlatforms ? JSON.parse(p.publishedPlatforms) : [],
+        kind: 'post',
       })),
+      ...legacy.map(c => {
+        let copy = null
+        try { copy = c.copy ? JSON.parse(c.copy) : null } catch {}
+        return {
+          id: c.id,
+          campaign: c.name,
+          headline: copy?.headlines?.[0] || c.name,
+          body: (copy?.body || c.description || '').slice(0, 200),
+          status: c.status,
+          createdAt: c.createdAt,
+          kind: 'campaign',
+        }
+      }),
+    ]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, cap)
+
+    return {
+      total: combined.length,
+      posts: combined,
+      // explicit hint for the LLM so it doesn't say "none" when results exist
+      note: combined.length === 0 ? 'No ads/campaigns drafted yet.' : `Found ${combined.length} ad(s)/campaign(s).`,
     }
   },
 
@@ -426,6 +470,72 @@ const HANDLERS = {
         type: r.type, severity: r.severity, title: r.title, message: r.message,
       })),
     }
+  },
+
+  async get_account_overview(_args, userId) {
+    const out = {}
+
+    // Instagram
+    const cred = await prisma.metaCredential.findUnique({ where: { userId } })
+    if (cred?.igBusinessAccountId && cred.pageAccessToken) {
+      try {
+        const profile = await getAccountProfile(cred.igBusinessAccountId, decrypt(cred.pageAccessToken))
+        const until = Math.floor(Date.now() / 1000)
+        const since = until - 7 * 86400
+        const ins = await getAccountInsights(cred.igBusinessAccountId, decrypt(cred.pageAccessToken), { since, until }).catch(() => ({ data: [] }))
+        const reach7d = (ins.data || []).find(d => d.name === 'reach')?.values?.reduce((a, v) => a + (v.value || 0), 0) ?? 0
+        out.instagram = {
+          username: profile.username,
+          followers: profile.followers_count,
+          posts: profile.media_count,
+          reach7d,
+        }
+      } catch (err) {
+        out.instagram = { error: err.message }
+      }
+    } else {
+      out.instagram = { connected: false }
+    }
+
+    // Facebook Page
+    if (cred?.pageId && cred.pageAccessToken) {
+      try {
+        const page = await getPageProfile(cred.pageId, decrypt(cred.pageAccessToken))
+        out.facebook = {
+          name: page.name,
+          fans: page.fan_count,
+          followers: page.followers_count,
+        }
+      } catch (err) {
+        out.facebook = { error: err.message }
+      }
+    } else {
+      out.facebook = { connected: false }
+    }
+
+    // Campaigns + posts
+    const [campaignCount, postsCount, publishedCount, leadsCount, recCount, sentimentCounts] = await Promise.all([
+      prisma.campaign.count({ where: { userId } }),
+      prisma.campaignPost.count({ where: { campaign: { userId } } }),
+      prisma.campaignPost.count({ where: { campaign: { userId }, status: 'published' } }),
+      prisma.lead.count({ where: { userId } }),
+      prisma.recommendation.count({ where: { userId, appliedAt: null, dismissedAt: null } }),
+      prisma.igCommentAnalysis.groupBy({
+        by: ['sentiment'],
+        where: { comment: { post: { userId } } },
+        _count: { _all: true },
+      }),
+    ])
+
+    out.campaigns = { total: campaignCount, postsTotal: postsCount, postsPublished: publishedCount }
+    out.leads = { total: leadsCount }
+    out.recommendations = { active: recCount }
+    out.commentSentiment = { positive: 0, neutral: 0, negative: 0, question: 0 }
+    for (const r of sentimentCounts) {
+      if (r.sentiment in out.commentSentiment) out.commentSentiment[r.sentiment] = r._count._all
+    }
+
+    return out
   },
 }
 

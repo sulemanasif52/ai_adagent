@@ -168,25 +168,38 @@ router.post('/analyze', requireAuth, asyncRoute(async (req, res) => {
     return u
   })
 
-  const useVision = provider === 'anthropic' && absoluteImageUrls.length > 0
+  // Vision-capable providers (in priority order). Use whichever the user has.
+  let visionProvider = null
+  if (absoluteImageUrls.length > 0) {
+    if (keys.anthropicKey) visionProvider = 'anthropic'
+    else if (keys.geminiKey) visionProvider = 'gemini'
+  }
+  const useVision = !!visionProvider
 
   const visionInstr = useVision
-    ? '\nThe user has attached an image. Describe what you see and tailor the copy to the actual product visible in the image.'
+    ? '\n\nIMPORTANT: The user has attached the actual product image. LOOK AT THE IMAGE and describe what you ACTUALLY SEE. Identify the product specifically (color, type, brand if visible, key features) and write copy that references real visible details — not generic marketing language. The first headline should call out a specific feature you can see.'
     : ''
 
   const messages = [
     { role: 'system', content: 'You are an expert direct-response marketer. Return ONLY valid JSON, no prose.' },
-    { role: 'user', content: `Product description: ${description || '(image only — describe what you see and write ad copy)'}${productName ? `\nProduct name: ${productName}` : ''}${absoluteImageUrls.length ? `\nMedia provided: ${absoluteImageUrls.length} file(s)` : ''}${visionInstr}\n\nAnalyze the product, infer the ideal target audience, and produce ad copy.\n\nReturn JSON exactly in this shape:\n{\n  "audience": "1-sentence audience description",\n  "targeting": {\n    "demographics": ["..."],\n    "interests": ["..."],\n    "ageRange": "min-max",\n    "platforms": ["facebook", "instagram"]\n  },\n  "imagePrompt": "1-sentence prompt suitable for an image-generation model — only used if user did NOT upload their own image",\n  "copy": {\n    "headlines": ["3 short headline variations"],\n    "body": "1-2 sentences",\n    "cta": "2-3 word call-to-action"\n  }\n}` },
+    { role: 'user', content: `Product description: ${description || '(image only — describe what you see and write ad copy about it)'}${productName ? `\nProduct name: ${productName}` : ''}${absoluteImageUrls.length ? `\nMedia provided: ${absoluteImageUrls.length} file(s)` : ''}${visionInstr}\n\nAnalyze the product, infer the ideal target audience, and produce ad copy.\n\nReturn JSON exactly in this shape:\n{\n  "audience": "1-sentence audience description",\n  "imageDescription": "${useVision ? '1-sentence factual description of what is in the image (so user knows AI saw it)' : 'leave empty'}",\n  "targeting": {\n    "demographics": ["..."],\n    "interests": ["..."],\n    "ageRange": "min-max",\n    "platforms": ["facebook", "instagram"]\n  },\n  "imagePrompt": "1-sentence prompt suitable for an image-generation model — only used if user did NOT upload their own image",\n  "copy": {\n    "headlines": ["3 short headline variations — first one MUST reference a real detail you can see in the image"],\n    "body": "1-2 sentences",\n    "cta": "2-3 word call-to-action"\n  }\n}` },
   ]
 
   let out
-  if (useVision) {
-    // Vision call (Anthropic only — Gemini vision API has different shape).
+  if (visionProvider === 'anthropic') {
     out = await anthropic.chat({
       apiKey: keys.anthropicKey,
       messages,
       maxTokens: 1500,
       imageUrls: absoluteImageUrls,
+    })
+  } else if (visionProvider === 'gemini') {
+    out = await gemini.chat({
+      apiKey: keys.geminiKey,
+      messages,
+      maxTokens: 1500,
+      imageUrls: absoluteImageUrls,
+      json: true,
     })
   } else {
     out = await callText({ provider, keys, messages, json: provider !== 'anthropic', maxTokens: 1200 })
@@ -199,10 +212,12 @@ router.post('/analyze', requireAuth, asyncRoute(async (req, res) => {
 
   res.json({
     audience: parsed.audience || '',
+    imageDescription: parsed.imageDescription || '',
     targeting: parsed.targeting || {},
     imagePrompt: parsed.imagePrompt || description,
     copy: parsed.copy || { headlines: [], body: '', cta: '' },
     provider,
+    visionProvider: visionProvider || null,
     usedVision: useVision,
   })
 }))

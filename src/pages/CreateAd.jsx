@@ -346,7 +346,19 @@ const CreateAd = () => {
 
                             {analysis && (
                                 <div style={{ marginTop: '1.5rem', padding: '1.25rem', background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: 'var(--radius-lg)' }}>
-                                    <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: '0.5rem' }}>AI Analysis</div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        AI Analysis
+                                        {analysis.usedVision && (
+                                            <span style={{ padding: '0.1rem 0.4rem', background: 'rgba(167, 139, 250, 0.2)', color: '#A78BFA', borderRadius: 999, fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                👁 Vision · {analysis.visionProvider}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {analysis.imageDescription && (
+                                        <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                                            <strong style={{ fontStyle: 'normal', color: 'var(--text-primary)' }}>What I see:</strong> {analysis.imageDescription}
+                                        </p>
+                                    )}
                                     <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem' }}><strong>Audience:</strong> {analysis.audience}</p>
                                     {analysis.copy?.headlines?.length > 0 && (
                                         <div style={{ marginBottom: '0.75rem' }}>
